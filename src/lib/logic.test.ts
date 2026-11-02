@@ -95,7 +95,7 @@ describe('Automatische Buchung', () => {
 
   it('legt die Startkategorien an', async () => {
     expect(await db.categories.count()).toBe(DEFAULT_CATEGORIES.length)
-    expect(DEFAULT_CATEGORIES.filter((c) => c.type === 'expense')).toHaveLength(11)
+    expect(DEFAULT_CATEGORIES.filter((c) => c.type === 'expense')).toHaveLength(12)
   })
   it('bucht rückwirkend, aber nie doppelt', async () => {
     await db.recurring.add(standing())

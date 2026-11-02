@@ -1,4 +1,4 @@
-import { db, getMeta, setMeta, type Category, type Entry, type Recurring } from '../db'
+import { db, getMeta, setMeta, splitFoodCategory, type Category, type Entry, type Recurring } from '../db'
 import { isValidIso, today } from './dates'
 import { expectSystemDialog } from './lockGuard'
 
@@ -54,7 +54,7 @@ export function parseBackup(text: string): Backup {
 export async function restoreBackup(backup: Backup): Promise<void> {
   await db.transaction('rw', db.categories, db.entries, db.recurring, db.meta, async () => {
     await Promise.all([db.categories.clear(), db.entries.clear(), db.recurring.clear()])
-    await db.categories.bulkAdd(backup.categories)
+    await db.categories.bulkAdd(splitFoodCategory(backup.categories))
     await db.entries.bulkAdd(backup.entries)
     await db.recurring.bulkAdd(backup.recurring)
     await setMeta('savingsGoal', backup.settings?.savingsGoal ?? null)

@@ -73,7 +73,8 @@ const seed = (type: EntryType, prefix: string, rows: [string, string, string, st
 export const DEFAULT_CATEGORIES: Category[] = [
   ...seed('expense', 'exp', [
     ['supermarkt', 'Supermarkt', '🛒', '#2a78d6'],
-    ['food', 'Food & Restaurants', '🍽️', '#eb6834'],
+    ['food', 'Food', '🍔', '#eb6834'],
+    ['restaurants', 'Restaurants', '🍽️', '#0e9aa7'],
     ['drogerie', 'Drogerie', '🧴', '#e87ba4'],
     ['shopping', 'Shopping & Kleidung', '🛍️', '#6250d6'],
     ['sport', 'Sport', '🏃', '#1baf7a'],
@@ -91,6 +92,22 @@ export const DEFAULT_CATEGORIES: Category[] = [
     ['oma', 'Taschengeld Oma & Opa', '👵', '#eda100'],
   ]),
 ]
+
+/** "Food & Restaurants" became two categories. Existing entries stay in Food. */
+export function splitFoodCategory(categories: Category[]): Category[] {
+  const food = categories.find((c) => c.id === 'exp-food' && c.name === 'Food & Restaurants')
+  if (!food || categories.some((c) => c.id === 'exp-restaurants')) return categories
+  const shifted = categories.map((c) => {
+    if (c.id === food.id) return { ...c, name: 'Food', emoji: c.emoji === '🍽️' ? '🍔' : c.emoji }
+    return c.type === 'expense' && c.order > food.order ? { ...c, order: c.order + 1 } : c
+  })
+  return [...shifted, { ...DEFAULT_CATEGORIES.find((c) => c.id === 'exp-restaurants')!, order: food.order + 1 }]
+}
+
+db.version(2).upgrade(async (tx) => {
+  const table = tx.table<Category, string>('categories')
+  await table.bulkPut(splitFoodCategory(await table.toArray()))
+})
 
 db.on('populate', (tx) => {
   tx.table('categories').bulkAdd(DEFAULT_CATEGORIES)
