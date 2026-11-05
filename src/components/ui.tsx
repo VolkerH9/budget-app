@@ -1,6 +1,9 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { ArrowDownRight, ArrowUpRight, ChevronDown } from 'lucide-react'
 import { addMonths, monthLabel, monthOf, today } from '../lib/dates'
+import { formatEuro } from '../lib/format'
+import { change } from '../lib/stats'
 import { Icon } from './Icon'
 
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
@@ -120,6 +123,93 @@ export function Toast({ text, onUndo, onDone }: { text: string; onUndo?: () => v
   )
 }
 
-export function CategoryIcon({ emoji, color }: { emoji: string; color: string }) {
-  return <span className="emoji" style={{ background: `${color}2e` }} aria-hidden="true">{emoji}</span>
+export function YearPicker({ year, onChange }: { year: number; onChange: (year: number) => void }) {
+  const current = Number(today().slice(0, 4))
+  return (
+    <div className="month-picker">
+      <button className="icon-btn" aria-label="Vorheriges Jahr" onClick={() => onChange(year - 1)}><Icon name="left" size={22} /></button>
+      <button className="month-label" onClick={() => onChange(current)}>
+        {year}
+        {year !== current && <small>Zum aktuellen Jahr</small>}
+      </button>
+      <button className="icon-btn" aria-label="Nächstes Jahr" onClick={() => onChange(year + 1)}><Icon name="right" size={22} /></button>
+    </div>
+  )
+}
+
+/** Remembers a choice while the app is open, also when the page is left and opened again. */
+const sticky = new Map<string, unknown>()
+export function useSticky<T>(key: string, initial: T): [T, (value: T) => void] {
+  const [value, setValue] = useState<T>(() => (sticky.has(key) ? (sticky.get(key) as T) : initial))
+  return [value, (next: T) => { sticky.set(key, next); setValue(next) }]
+}
+
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches
+
+/** Counts up to a new value, quickly and with a soft ending. */
+export function useCountUp(value: number, duration = 650): number {
+  const [shown, setShown] = useState(reducedMotion() ? value : 0)
+  const from = useRef(0)
+  useEffect(() => {
+    if (reducedMotion()) {
+      setShown(value)
+      return
+    }
+    const start = performance.now()
+    const begin = from.current
+    let frame = 0
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / duration)
+      const eased = 1 - (1 - t) ** 3
+      const next = Math.round(begin + (value - begin) * eased)
+      from.current = next
+      setShown(next)
+      if (t < 1) frame = requestAnimationFrame(step)
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [value, duration])
+  return shown
+}
+
+export function CountUp({ cents, className }: { cents: number; className?: string }) {
+  return <span className={className ? `num ${className}` : 'num'} aria-label={formatEuro(cents)}>{formatEuro(useCountUp(cents))}</span>
+}
+
+/** Content that glides open and closed. Closed content leaves the page after the slide. */
+export function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+  const [mounted, setMounted] = useState(open)
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      return
+    }
+    const timer = setTimeout(() => setMounted(false), 280)
+    return () => clearTimeout(timer)
+  }, [open])
+  return (
+    <div className={open ? 'collapse open' : 'collapse'} aria-hidden={!open}>
+      <div>{(open || mounted) && children}</div>
+    </div>
+  )
+}
+
+export function Chevron({ open }: { open: boolean }) {
+  return <ChevronDown className={open ? 'chev open' : 'chev'} size={18} strokeWidth={2} aria-hidden="true" />
+}
+
+/** Small arrow with the change in percent, e.g. "↗ 15 % zu Oktober" */
+export function Trend({ current, previous, label }: { current: number; previous: number; label?: string }) {
+  if (current === 0 && previous === 0) return null
+  const ratio = change(current, previous)
+  if (ratio === null) return <span className="trend">neu{label ? ` ${label}` : ''}</span>
+  const percent = Math.round(Math.abs(ratio) * 100)
+  if (percent === 0) return <span className="trend">± 0 %{label ? ` ${label}` : ''}</span>
+  const Arrow = ratio > 0 ? ArrowUpRight : ArrowDownRight
+  return (
+    <span className="trend" aria-label={`${ratio > 0 ? 'plus' : 'minus'} ${percent} Prozent${label ? ` ${label}` : ''}`}>
+      <Arrow size={13} strokeWidth={2.2} aria-hidden="true" />
+      {ratio > 0 ? '+' : '−'}{percent} %{label ? ` ${label}` : ''}
+    </span>
+  )
 }

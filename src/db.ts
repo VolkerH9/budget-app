@@ -1,17 +1,31 @@
 import Dexie, { type EntityTable } from 'dexie'
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
 import type { Interval } from './lib/recurring'
 
 export type EntryType = 'expense' | 'saving' | 'income'
+
+export interface Group {
+  id: string
+  type: EntryType
+  name: string
+  color: string
+  order: number
+}
 
 export interface Category {
   id: string
   type: EntryType
   name: string
   emoji: string
+  /** Name of a line icon, see components/CategoryIcon */
+  icon?: string
+  /** Which of the two is shown, the icon when not set */
+  symbol?: 'icon' | 'emoji'
   color: string
   order: number
   /** Monthly budget in cents, expense categories only */
   budget?: number
+  groupId?: string
 }
 
 export interface Entry {
@@ -28,8 +42,16 @@ export interface Entry {
   recurringId?: string
   /** `${recurringId}:${date}`, unique, so a booking cannot exist twice */
   recurringKey?: string
+  /** Parents paid this expense back */
+  refunded?: boolean
   createdAt: number
   sample?: boolean
+}
+
+export interface Subscription {
+  /** Days before the renewal by which it must be cancelled */
+  noticeDays?: number
+  note?: string
 }
 
 export interface Recurring {
@@ -39,12 +61,16 @@ export interface Recurring {
   type: EntryType
   categoryId: string
   interval: Interval
+  /** Interval 'custom': number of months between bookings */
+  everyMonths?: number
   bookingDay: number
   startDate: string
   endDate?: string
   paused: boolean
   /** Next date that has not been booked yet */
   nextDue: string
+  /** Set for entries of the Abos list */
+  subscription?: Subscription
   sample?: boolean
 }
 
@@ -53,65 +79,93 @@ export interface Meta {
   value: unknown
 }
 
-export const db = new Dexie('budget') as Dexie & {
+export type Tables = {
   categories: EntityTable<Category, 'id'>
+  groups: EntityTable<Group, 'id'>
   entries: EntityTable<Entry, 'id'>
   recurring: EntityTable<Recurring, 'id'>
   meta: EntityTable<Meta, 'key'>
 }
 
+export const TABLES = ['categories', 'groups', 'entries', 'recurring', 'meta'] as const
+export type TableName = (typeof TABLES)[number]
+
+// The in-memory database schedules its work with setImmediate. Safari has none,
+// and its setTimeout fallback waits at least 4 ms per step.
+if (typeof (globalThis as { setImmediate?: unknown }).setImmediate !== 'function') {
+  const queue: (() => void)[] = []
+  const channel = new MessageChannel()
+  channel.port1.onmessage = () => queue.shift()?.()
+  Object.assign(globalThis, { setImmediate: (fn: () => void) => { queue.push(fn); channel.port2.postMessage(0) } })
+}
+
+/**
+ * The app works on a copy in memory. Only lib/vault writes to the device,
+ * and only in encrypted form.
+ */
+export const db = new Dexie('budget-memory', { indexedDB: new IDBFactory(), IDBKeyRange }) as Dexie & Tables
+
 db.version(1).stores({
-  categories: 'id, type, order',
+  categories: 'id, type, order, groupId',
+  groups: 'id, type, order',
   entries: 'id, date, [type+date], categoryId, recurringId, &recurringKey',
   recurring: 'id, categoryId',
   meta: 'key',
 })
 
-const seed = (type: EntryType, prefix: string, rows: [string, string, string, string][]): Category[] =>
-  rows.map(([id, name, emoji, color], order) => ({ id: `${prefix}-${id}`, type, name, emoji, color, order }))
+/** Fixed ids of the two categories the parents switch looks at */
+export const PARENTS_EXPENSE = 'exp-eltern'
+export const PARENTS_REFUND = 'inc-rueckzahlung'
+export const PARENT_CATEGORIES = [PARENTS_EXPENSE, PARENTS_REFUND]
+export const SUBSCRIPTION_CATEGORY = 'exp-abos'
+
+// Muted colours, checked for colour blindness and contrast in light and dark mode
+export const PALETTE = ['#4a76c8', '#c86f30', '#2f9a76', '#a066cc', '#a8861a', '#cc5c70']
+const [BLUE, ORANGE, GREEN, PURPLE, MUSTARD, ROSE] = PALETTE
+
+export const DEFAULT_GROUPS: Group[] = [
+  { id: 'grp-essen', type: 'expense', name: 'Essen & Alltag', color: BLUE, order: 0 },
+  { id: 'grp-freizeit', type: 'expense', name: 'Freizeit & Lifestyle', color: ORANGE, order: 1 },
+  { id: 'grp-studium', type: 'expense', name: 'Studium & Abos', color: GREEN, order: 2 },
+  { id: 'grp-mobil', type: 'expense', name: 'Mobilität', color: PURPLE, order: 3 },
+  { id: 'grp-familie', type: 'income', name: 'Familie', color: BLUE, order: 0 },
+]
+
+type Seed = [id: string, name: string, emoji: string, icon: string, color: string, groupId?: string]
+
+const seed = (type: EntryType, prefix: string, rows: Seed[]): Category[] =>
+  rows.map(([id, name, emoji, icon, color, groupId], order) => ({
+    id: `${prefix}-${id}`, type, name, emoji, icon, color, order, ...(groupId ? { groupId } : {}),
+  }))
 
 export const DEFAULT_CATEGORIES: Category[] = [
   ...seed('expense', 'exp', [
-    ['supermarkt', 'Supermarkt', '🛒', '#2a78d6'],
-    ['food', 'Food', '🍔', '#eb6834'],
-    ['restaurants', 'Restaurants', '🍽️', '#0e9aa7'],
-    ['drogerie', 'Drogerie', '🧴', '#e87ba4'],
-    ['shopping', 'Shopping & Kleidung', '🛍️', '#6250d6'],
-    ['sport', 'Sport', '🏃', '#1baf7a'],
-    ['freizeit', 'Kino & Freizeit', '🎬', '#eda100'],
-    ['vacation', 'Vacation', '✈️', '#008300'],
-    ['mobility', 'Mobility/Auto', '🚗', '#5b6b82'],
-    ['studium', 'Studium', '🎓', '#a4703a'],
-    ['abos', 'Abos', '📺', '#e34948'],
-    ['diverse', 'Diverse', '📦', '#8e8e93'],
+    ['supermarkt', 'Supermarkt', '🛒', 'shopping-cart', BLUE, 'grp-essen'],
+    ['food', 'Food', '🍔', 'hamburger', BLUE, 'grp-essen'],
+    ['restaurants', 'Restaurants', '🍽️', 'utensils', BLUE, 'grp-essen'],
+    ['drogerie', 'Drogerie', '🧴', 'spray-can', BLUE, 'grp-essen'],
+    ['shopping', 'Shopping & Kleidung', '🛍️', 'shirt', ORANGE, 'grp-freizeit'],
+    ['sport', 'Sport', '🏃', 'dumbbell', ORANGE, 'grp-freizeit'],
+    ['freizeit', 'Kino & Freizeit', '🎬', 'clapperboard', ORANGE, 'grp-freizeit'],
+    ['vacation', 'Vacation', '✈️', 'plane', ORANGE, 'grp-freizeit'],
+    ['geschenke', 'Geschenke', '🎁', 'gift', ORANGE, 'grp-freizeit'],
+    ['studium', 'Studium', '🎓', 'graduation-cap', GREEN, 'grp-studium'],
+    ['abos', 'Abos', '📺', 'tv', GREEN, 'grp-studium'],
+    ['mobility', 'Auto', '🚗', 'car-front', PURPLE, 'grp-mobil'],
+    ['oepnv', 'ÖPNV', '🚆', 'train-front', PURPLE, 'grp-mobil'],
+    ['parken', 'Parken', '🅿️', 'square-parking', PURPLE, 'grp-mobil'],
+    ['strafzettel', 'Strafzettel & Bußgelder', '🚨', 'siren', PURPLE, 'grp-mobil'],
+    ['eltern', 'Eltern', '👪', 'heart-handshake', MUSTARD],
+    ['diverse', 'Diverse', '📦', 'package', ROSE],
   ]),
-  ...seed('saving', 'sav', [['investitionen', 'Investitionen', '📈', '#6250d6']]),
+  ...seed('saving', 'sav', [['investitionen', 'Investitionen', '📈', 'trending-up', GREEN]]),
   ...seed('income', 'inc', [
-    ['income', 'Income (Gehalt)', '💼', '#008300'],
-    ['parents', 'Parents Allowance', '👪', '#1baf7a'],
-    ['oma', 'Taschengeld Oma & Opa', '👵', '#eda100'],
+    ['income', 'Income (Gehalt)', '💼', 'briefcase', PURPLE],
+    ['parents', 'Parents Allowance', '👪', 'users', BLUE, 'grp-familie'],
+    ['oma', 'Taschengeld Oma & Opa', '👵', 'hand-coins', BLUE, 'grp-familie'],
+    ['rueckzahlung', 'Kostenrückzahlung Eltern', '💶', 'undo-2', BLUE, 'grp-familie'],
   ]),
 ]
-
-/** "Food & Restaurants" became two categories. Existing entries stay in Food. */
-export function splitFoodCategory(categories: Category[]): Category[] {
-  const food = categories.find((c) => c.id === 'exp-food' && c.name === 'Food & Restaurants')
-  if (!food || categories.some((c) => c.id === 'exp-restaurants')) return categories
-  const shifted = categories.map((c) => {
-    if (c.id === food.id) return { ...c, name: 'Food', emoji: c.emoji === '🍽️' ? '🍔' : c.emoji }
-    return c.type === 'expense' && c.order > food.order ? { ...c, order: c.order + 1 } : c
-  })
-  return [...shifted, { ...DEFAULT_CATEGORIES.find((c) => c.id === 'exp-restaurants')!, order: food.order + 1 }]
-}
-
-db.version(2).upgrade(async (tx) => {
-  const table = tx.table<Category, string>('categories')
-  await table.bulkPut(splitFoodCategory(await table.toArray()))
-})
-
-db.on('populate', (tx) => {
-  tx.table('categories').bulkAdd(DEFAULT_CATEGORIES)
-})
 
 export const newId = () => crypto.randomUUID()
 

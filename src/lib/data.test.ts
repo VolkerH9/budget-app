@@ -1,7 +1,9 @@
 import 'fake-indexeddb/auto'
 import Dexie from 'dexie'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { db, DEFAULT_CATEGORIES, setMeta, splitFoodCategory, type Category, type Entry } from '../db'
+import { db, DEFAULT_CATEGORIES, setMeta, type Category, type Entry } from '../db'
+import { splitFoodCategory } from './migrate'
+import { prepareSetup, resetDevice } from './vault'
 import { createBackup, parseBackup, restoreBackup, toCsv } from './backup'
 import { hasSampleData, loadSampleData, removeSampleData } from './sample'
 import { ScanError, toScanResult } from './scan'
@@ -11,8 +13,10 @@ const entry = (over: Partial<Entry> = {}): Entry => ({
 })
 
 beforeEach(async () => {
+  await resetDevice()
   await db.delete()
   await db.open()
+  await prepareSetup()
 })
 
 const oldCategories = (): Category[] => DEFAULT_CATEGORIES
@@ -21,20 +25,19 @@ const oldCategories = (): Category[] => DEFAULT_CATEGORIES
 
 describe('Aufteilung Food & Restaurants', () => {
   it('stellt bestehende Daten beim Update um', async () => {
-    db.close()
-    await Dexie.delete('budget')
+    await resetDevice()
     const old = new Dexie('budget')
     old.version(1).stores({ categories: 'id, type, order', entries: 'id, date, [type+date], categoryId, recurringId, &recurringKey', recurring: 'id, categoryId', meta: 'key' })
     await old.open()
     await old.table('categories').bulkAdd(oldCategories().map((c, i) => ({ ...c, order: c.type === 'expense' ? i : c.order })))
     await old.table('entries').add(entry({ note: 'Burger' }))
     old.close()
-    await db.open()
+    await prepareSetup()
     const expenses = await db.categories.where('type').equals('expense').sortBy('order')
     expect(expenses.slice(0, 3).map((c) => c.name)).toEqual(['Supermarkt', 'Food', 'Restaurants'])
-    expect(expenses).toHaveLength(12)
-    expect(new Set(expenses.map((c) => c.order)).size).toBe(12)
-    expect(expenses[1]).toMatchObject({ id: 'exp-food', budget: 12000, emoji: '🍔' })
+    expect(expenses).toHaveLength(17)
+    expect(new Set(expenses.map((c) => c.order)).size).toBe(17)
+    expect(expenses[1]).toMatchObject({ id: 'exp-food', budget: 12000, emoji: '🍔', groupId: 'grp-essen' })
     expect(expenses[2].budget).toBeUndefined()
     expect((await db.entries.toArray())[0]).toMatchObject({ note: 'Burger', categoryId: 'exp-food' })
   })
@@ -46,6 +49,7 @@ describe('Aufteilung Food & Restaurants', () => {
   })
   it('wandelt alte Backups beim Einspielen um', async () => {
     const backup = await createBackup()
+    backup.version = 1
     backup.categories = oldCategories()
     await restoreBackup(parseBackup(JSON.stringify(backup)))
     expect((await db.categories.get('exp-food'))?.name).toBe('Food')
@@ -66,7 +70,7 @@ describe('Backup', () => {
     expect((await db.categories.get('c1'))?.budget).toBe(500)
     expect((await db.meta.get('savingsGoal'))?.value).toBe(20)
   })
-  it('enthält weder API-Schlüssel noch PIN', async () => {
+  it('enthält weder API-Schlüssel noch Zugangscode', async () => {
     await setMeta('apiKey', 'sk-ant-geheim')
     await setMeta('lock', { pinHash: 'geheim' })
     expect(JSON.stringify(await createBackup())).not.toContain('geheim')
@@ -87,7 +91,7 @@ describe('CSV', () => {
     const csv = toCsv([entry({ note: '=SUMME(A1)', merchant: 'Café; "Süd"' })], DEFAULT_CATEGORIES)
     const line = csv.split('\r\n')[1]
     expect(csv.startsWith('﻿Datum;Art;')).toBe(true)
-    expect(line).toBe(`02.11.2026;Ausgabe;Food;19,99;"Café; ""Süd""";'=SUMME(A1);nein`)
+    expect(line).toBe(`02.11.2026;Ausgabe;;Food;19,99;"Café; ""Süd""";'=SUMME(A1);nein`)
   })
 })
 
@@ -102,7 +106,7 @@ describe('Beispieldaten', () => {
     await removeSampleData()
     expect(await hasSampleData()).toBe(false)
     expect((await db.entries.toArray()).map((e) => e.note)).toEqual(['Meins'])
-    expect(await db.recurring.count()).toBe(0)
+    expect(await db.recurring.filter((r) => !!r.sample).count()).toBe(0)
     expect((await db.categories.get('exp-supermarkt'))?.budget).toBeUndefined()
     expect((await db.categories.get('exp-sport'))?.budget).toBe(1234)
   })

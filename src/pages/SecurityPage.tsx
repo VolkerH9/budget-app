@@ -1,129 +1,114 @@
-import { useEffect, useState } from 'react'
-import { useApp, useMeta } from '../context'
-import { PinDots, PinPad } from '../components/LockGate'
+import { useCallback, useEffect, useState } from 'react'
+import { useApp } from '../context'
+import { CodeFields } from '../components/LockGate'
 import { Sheet, Switch } from '../components/ui'
-import { checkPin, disableLock, enableLock, faceIdAvailable, PIN_LENGTH, registerFaceId, updateLock, type LockConfig } from '../lib/lock'
+import { faceIdAvailable, NoPrfError, registerFaceId } from '../lib/lock'
+import { changeCode, disableFaceId, enableFaceId, getKeyring, setLockAfter, type Keyring } from '../lib/vault'
 import { SubPage } from './Settings'
 
-const LOCK_AFTER: [number, string][] = [[0, 'Bei jedem Öffnen'], [60, 'Nach 1 Minute'], [300, 'Nach 5 Minuten']]
+const LOCK_AFTER: [number, string][] = [[0, 'Sofort'], [60, 'Nach 1 Minute'], [300, 'Nach 5 Minuten'], [900, 'Nach 15 Minuten']]
 
-/** Asks for a PIN once, or twice when `confirm` is set. */
-function PinSheet({ title, confirm, verify, onDone, onClose }: {
-  title: string
-  confirm?: boolean
-  verify?: (pin: string) => Promise<boolean>
-  onDone: (pin: string) => void
-  onClose: () => void
-}) {
-  const [pin, setPin] = useState('')
-  const [first, setFirst] = useState<string | null>(null)
+function ChangeCodeSheet({ onClose }: { onClose: () => void }) {
+  const { toast } = useApp()
+  const [old, setOld] = useState('')
+  const [code, setCode] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const onCode = useCallback((value: string | null) => setCode(value), [])
 
-  const press = async (digit: string) => {
-    const next = pin + digit
-    setPin(next)
-    if (next.length < PIN_LENGTH) return
-    if (verify && !(await verify(next))) {
-      setPin('')
-      setMessage('Falsche PIN')
-    } else if (confirm && first === null) {
-      setFirst(next)
-      setPin('')
-      setMessage('')
-    } else if (confirm && first !== next) {
-      setFirst(null)
-      setPin('')
-      setMessage('Die PINs waren verschieden. Bitte noch einmal.')
-    } else {
-      onDone(next)
+  const save = async () => {
+    if (!code || !old) return
+    setBusy(true)
+    const ok = await changeCode(old, code)
+    setBusy(false)
+    if (!ok) {
+      setMessage('Der bisherige Code stimmt nicht.')
+      return
     }
+    toast('Zugangscode geändert')
+    onClose()
   }
 
   return (
-    <Sheet title={title} onClose={onClose}>
-      <div style={{ display: 'grid', justifyItems: 'center', gap: 16, padding: '8px 0' }}>
-        <p className="row-sub" style={{ margin: 0 }} role="status">
-          {message || (confirm ? (first === null ? `Wähle eine ${PIN_LENGTH}-stellige PIN` : 'PIN wiederholen') : 'PIN eingeben')}
-        </p>
-        <PinDots length={pin.length} />
-        <PinPad onDigit={press} onBack={() => setPin(pin.slice(0, -1))} />
-      </div>
+    <Sheet title="Code ändern" onClose={onClose} full action={{ label: busy ? 'Prüfe …' : 'Sichern', disabled: !code || !old || busy, onClick: save }}>
+      <form onSubmit={(e) => { e.preventDefault(); save() }}>
+        <div className="group">
+          <input type="text" name="username" autoComplete="username" value="Budget-App" readOnly hidden />
+          <label className="row">
+            <input className="left" type="password" autoComplete="current-password" placeholder="Bisheriger Code" aria-label="Bisheriger Code" value={old} onChange={(e) => setOld(e.target.value)} autoFocus />
+          </label>
+        </div>
+        <p className="section-foot danger" role="status">{message}</p>
+        <h3 className="section-title">Neuer Code</h3>
+        <CodeFields onChange={onCode} />
+      </form>
+      <p className="section-foot">Deine Daten bleiben dabei unverändert. Notiere den neuen Code sicher, zum Beispiel in der Passwörter-App.</p>
     </Sheet>
   )
 }
 
 export function SecurityPage({ onBack }: { onBack: () => void }) {
   const { alert, toast } = useApp()
-  const lock = useMeta<LockConfig | null>('lock', null)
-  const [sheet, setSheet] = useState<'enable' | 'disable' | null>(null)
+  const [ring, setRing] = useState<Keyring | null>(null)
   const [available, setAvailable] = useState(false)
+  const [changing, setChanging] = useState(false)
 
-  useEffect(() => { faceIdAvailable().then(setAvailable) }, [])
+  const reload = useCallback(() => { getKeyring().then((value) => setRing(value ?? null)) }, [])
+  useEffect(() => {
+    reload()
+    faceIdAvailable().then(setAvailable)
+  }, [reload])
 
   const toggleFaceId = async (on: boolean) => {
     if (!on) {
-      await updateLock({ credentialId: undefined })
+      await disableFaceId()
+      reload()
       return
     }
     try {
-      await updateLock({ credentialId: await registerFaceId() })
+      const { credentialId, salt, secret } = await registerFaceId()
+      await enableFaceId(credentialId, salt, secret)
       toast('Face ID ist aktiv')
-    } catch {
+    } catch (error) {
       alert({
         title: 'Face ID nicht eingerichtet',
-        message: 'Der Vorgang wurde abgebrochen oder dein iPhone hat ihn abgelehnt. Prüfe, ob Face ID und der iCloud-Schlüsselbund aktiv sind. Die PIN funktioniert weiterhin.',
+        message: error instanceof NoPrfError
+          ? 'Dein iPhone gibt für Web-Apps kein Face-ID-Geheimnis heraus, mit dem sich die Daten entschlüsseln lassen. Du entsperrst weiter mit deinem Code.'
+          : 'Der Vorgang wurde abgebrochen oder dein iPhone hat ihn abgelehnt. Prüfe, ob Face ID und der iCloud-Schlüsselbund aktiv sind. Dein Code funktioniert weiterhin.',
         buttons: [{ label: 'OK', style: 'strong' }],
       })
     }
+    reload()
   }
 
   return (
-    <SubPage title="Face ID und PIN" onBack={onBack}>
+    <SubPage title="Zugangscode und Face ID" onBack={onBack}>
       <div className="group">
         <div className="row">
-          <span className="row-main">App-Sperre</span>
-          <Switch label="App-Sperre" checked={!!lock} onChange={(on) => setSheet(on ? 'enable' : 'disable')} />
+          <span className="row-main">
+            Mit Face ID entsperren
+            {!available && <span className="row-sub" style={{ display: 'block' }}>Auf diesem Gerät nicht verfügbar</span>}
+          </span>
+          <Switch label="Face ID" checked={!!ring?.faceId} onChange={toggleFaceId} />
         </div>
-        {lock && (
-          <div className="row">
-            <span className="row-main">
-              Face ID
-              {!available && <span className="row-sub" style={{ display: 'block' }}>Auf diesem Gerät nicht verfügbar</span>}
-            </span>
-            <Switch label="Face ID" checked={!!lock.credentialId} onChange={toggleFaceId} />
-          </div>
-        )}
-        {lock && (
-          <label className="row">
-            <span className="row-main">Sperren</span>
-            <select aria-label="Wann sperren" value={lock.lockAfter} onChange={(e) => updateLock({ lockAfter: Number(e.target.value) })}>
-              {LOCK_AFTER.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-        )}
+        <label className="row">
+          <span className="row-main">Sperren im Hintergrund</span>
+          <select aria-label="Wann sperren" value={ring?.lockAfter ?? 300} onChange={async (e) => { await setLockAfter(Number(e.target.value)); reload() }}>
+            {LOCK_AFTER.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <button className="row tint" onClick={() => setChanging(true)}>Zugangscode ändern</button>
       </div>
-      {lock && <p className="section-foot">Klappt Face ID nicht, entsperrst du die App mit deiner PIN. Eine vergessene PIN lässt sich nicht zurücksetzen. Dann hilft nur, die App neu zu installieren und ein Backup einzuspielen.</p>}
+      <p className="section-foot">Klappt Face ID nicht, entsperrst du die App immer mit deinem Code. Nach mehreren falschen Codes wartet die App immer länger, bis zu einer Stunde.</p>
 
-      <h2 className="section-title">Was die Sperre schützt</h2>
-      <div className="card" style={{ fontSize: 15, lineHeight: 1.4 }}>
-        <p style={{ marginTop: 0 }}><b>Sie schützt</b> vor neugierigen Blicken, wenn jemand dein entsperrtes iPhone in der Hand hat oder die App zufällig öffnet.</p>
-        <p style={{ marginBottom: 0 }}><b>Sie schützt nicht</b> vor gezielten Angriffen. Deine Daten und dein API-Schlüssel liegen unverschlüsselt im Browser-Speicher der App. Wer dein iPhone entsperren und technisch darauf zugreifen kann, kommt an sie heran. Der wichtigste Schutz bleibt der Code deines iPhones.</p>
+      <h2 className="section-title">So sind deine Daten geschützt</h2>
+      <div className="card prose">
+        <p><b>Verschlüsselt:</b> Alle Einträge, Kategorien, Daueraufträge, Abos, Einstellungen und dein API-Schlüssel liegen mit AES-256 verschlüsselt auf diesem iPhone. Den Schlüssel dafür erzeugt die App aus deinem Code. Der Code selbst wird nirgends gespeichert.</p>
+        <p><b>Die Web-Adresse ist öffentlich,</b> deine Daten aber nicht. Wer die Adresse öffnet, bekommt eine leere App mit eigenem Speicher auf seinem eigenen Gerät. Zu deinem iPhone gibt es keine Verbindung.</p>
+        <p><b>Grenzen:</b> Solange die App entsperrt ist, sind die Daten im Arbeitsspeicher lesbar. Die Wartezeit nach falschen Codes schützt vor Raten in der App. Gegen jemanden, der den Speicher deines entsperrten iPhones kopiert, hilft nur ein langer Code mit Buchstaben und Zahlen. Exportierte Backups sind nicht verschlüsselt, bewahre sie sicher auf, etwa in iCloud Drive.</p>
+        <p><b>Code vergessen?</b> Dann kann niemand die Daten entschlüsseln. Es bleibt nur „Code vergessen?“ auf dem Sperrbildschirm: Die App wird zurückgesetzt und du spielst dein letztes Backup ein. Sichere deshalb regelmäßig ein Backup.</p>
       </div>
-
-      {sheet === 'enable' && (
-        <PinSheet title="PIN festlegen" confirm onClose={() => setSheet(null)} onDone={async (pin) => {
-          await enableLock(pin)
-          setSheet(null)
-          toast('App-Sperre ist aktiv')
-        }} />
-      )}
-      {sheet === 'disable' && lock && (
-        <PinSheet title="Sperre ausschalten" verify={(pin) => checkPin(pin, lock)} onClose={() => setSheet(null)} onDone={async () => {
-          await disableLock()
-          setSheet(null)
-          toast('App-Sperre ist aus')
-        }} />
-      )}
+      {changing && <ChangeCodeSheet onClose={() => setChanging(false)} />}
     </SubPage>
   )
 }

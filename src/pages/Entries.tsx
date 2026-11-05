@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Category, type Entry, type EntryType } from '../db'
+import { db, PARENTS_EXPENSE, type Category, type Entry, type EntryType } from '../db'
 import { useApp, useCategories } from '../context'
 import { Icon } from '../components/Icon'
 import { SwipeRow } from '../components/SwipeRow'
-import { CategoryIcon, MonthPicker } from '../components/ui'
+import { MonthPicker } from '../components/ui'
+import { CategoryIcon, categoryText } from '../components/CategoryIcon'
 import { dayLabel, monthRange } from '../lib/dates'
 import { formatEuro } from '../lib/format'
 
@@ -21,12 +22,13 @@ function EntryRow({ entry, category }: { entry: Entry; category?: Category }) {
   return (
     <SwipeRow onEdit={() => openEntry(entry)} onDelete={() => deleteEntry(entry)}>
       <button className="row" onClick={() => openEntry(entry)}>
-        <CategoryIcon emoji={category?.emoji ?? '❔'} color={category?.color ?? '#868e96'} />
+        <CategoryIcon category={category} />
         <span className="row-main">
           <span className="row-title" style={{ display: 'block' }}>{category?.name ?? 'Ohne Kategorie'}</span>
-          {(detail || entry.recurringId) && (
+          {(detail || entry.recurringId || entry.refunded) && (
             <span className="row-sub" style={{ display: 'block' }}>
               {entry.recurringId && <span className="badge">Dauerauftrag</span>}
+              {entry.categoryId === PARENTS_EXPENSE && entry.refunded && <span className="badge">Erstattet</span>}
               {detail}
             </span>
           )}
@@ -85,7 +87,7 @@ export function Entries() {
           <button key={key} className="chip" aria-pressed={type === key} onClick={() => { setType(key); setCategoryId('') }}>{label}</button>
         ))}
         <button className="chip" style={{ position: 'relative' }} aria-pressed={!!categoryId}>
-          {selected ? `${selected.emoji} ${selected.name}` : 'Kategorie'} ▾
+          {selected ? categoryText(selected) : 'Kategorie'} ▾
           <select
             aria-label="Nach Kategorie filtern"
             style={{ position: 'absolute', inset: 0, width: '100%', opacity: 0 }}
@@ -93,7 +95,7 @@ export function Entries() {
             onChange={(e) => setCategoryId(e.target.value)}
           >
             <option value="">Alle Kategorien</option>
-            {pickable.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+            {pickable.map((c) => <option key={c.id} value={c.id}>{categoryText(c)}</option>)}
           </select>
         </button>
         <button className="chip" aria-pressed={allMonths} onClick={() => setAllMonths(!allMonths)}>Alle Monate</button>

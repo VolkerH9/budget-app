@@ -1,18 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, requestPersistence, setMeta } from '../db'
-import { useApp, useCategories, useMeta } from '../context'
+import { useApp, useCategories, useGroups, useMeta, type SettingsPage } from '../context'
 import { Icon } from '../components/Icon'
-import { Sheet, Switch } from '../components/ui'
-import { backupName, createBackup, parseBackup, restoreBackup, saveFile, toCsv } from '../lib/backup'
+import { Segmented, Sheet, Switch } from '../components/ui'
+import { backupName, createBackup, markBackupDone, parseBackup, restoreBackup, saveFile, toCsv } from '../lib/backup'
 import { bookDueEntries } from '../lib/booking'
 import { expectSystemDialog } from '../lib/lockGuard'
 import { hasSampleData, loadSampleData, removeSampleData } from '../lib/sample'
+import { totals } from '../lib/subscriptions'
+import { setTheme, useTheme, type Theme } from '../lib/theme'
+import { formatEuro } from '../lib/format'
 import { CategoriesPage } from './CategoriesPage'
 import { RecurringPage } from './RecurringPage'
 import { SecurityPage } from './SecurityPage'
+import { SubscriptionsPage } from './SubscriptionsPage'
 
-type Sub = 'categories' | 'recurring' | 'security' | 'scan' | null
+type Sub = SettingsPage | null
+
+function DesignPage({ onBack }: { onBack: () => void }) {
+  const theme = useTheme()
+  return (
+    <SubPage title="Design" onBack={onBack}>
+      <Segmented<Theme> value={theme} options={[['standard', 'Standard'], ['hud', 'HUD']]} onChange={setTheme} />
+      <p className="section-foot">
+        <b>Standard</b> folgt dem hellen oder dunklen Modus deines iPhones.
+        <b> HUD</b> ist ein dunkles Design mit dünnen, leuchtenden Linien und Ringen mit Skala, wie ein Head-up-Display.
+      </p>
+    </SubPage>
+  )
+}
+
+const daysAgo = (time: number) => {
+  const days = Math.floor((Date.now() - time) / 86_400_000)
+  return days === 0 ? 'Heute' : days === 1 ? 'Gestern' : `Vor ${days} Tagen`
+}
 
 export function SubPage({ title, onBack, children }: { title: string; onBack: () => void; children: React.ReactNode }) {
   return (
@@ -86,34 +108,49 @@ function GoalSheet({ onClose }: { onClose: () => void }) {
 }
 
 export function Settings() {
-  const { alert, toast } = useApp()
+  const { alert, toast, settingsPage, clearSettingsPage } = useApp()
   const categories = useCategories()
-  const [sub, setSub] = useState<Sub>(null)
+  const groups = useGroups()
+  const [sub, setSub] = useState<Sub>(settingsPage)
   const [goalOpen, setGoalOpen] = useState(false)
   const [persisted, setPersisted] = useState<boolean | null>(null)
   const goal = useMeta<number | null>('savingsGoal', null)
-  const lock = useMeta<unknown>('lock', null)
   const apiKey = useMeta('apiKey', '')
-  const standing = useLiveQuery(() => db.recurring.count(), [], 0)
+  const lastBackup = useMeta<number | null>('lastBackupAt', null)
+  const preUpdate = useMeta<unknown>('preUpdateBackup', null)
+  const theme = useTheme()
+  const standing = useLiveQuery(() => db.recurring.filter((r) => !r.subscription).count(), [], 0)
+  const subscriptions = useLiveQuery(() => db.recurring.filter((r) => !!r.subscription).toArray(), [], [])
   const sample = useLiveQuery(hasSampleData, [], false)
   const importer = useRef<HTMLInputElement>(null)
 
   useEffect(() => { requestPersistence().then(setPersisted) }, [])
+  useEffect(() => {
+    if (settingsPage) {
+      setSub(settingsPage)
+      clearSettingsPage()
+    }
+  }, [settingsPage, clearSettingsPage])
 
   if (sub === 'categories') return <CategoriesPage onBack={() => setSub(null)} />
   if (sub === 'recurring') return <RecurringPage onBack={() => setSub(null)} />
+  if (sub === 'subscriptions') return <SubscriptionsPage onBack={() => setSub(null)} />
   if (sub === 'security') return <SecurityPage onBack={() => setSub(null)} />
   if (sub === 'scan') return <ScanPage onBack={() => setSub(null)} />
+  if (sub === 'design') return <DesignPage onBack={() => setSub(null)} />
 
   const fail = (error: unknown) => alert({ title: 'Das hat nicht geklappt', message: (error as Error).message, buttons: [{ label: 'OK', style: 'strong' }] })
 
   const exportJson = () => createBackup()
     .then((backup) => saveFile(backupName('json'), JSON.stringify(backup), 'application/json'))
+    .then(markBackupDone)
     .catch(fail)
+
+  const exportPreUpdate = () => saveFile(`budget-backup-vor-update.json`, JSON.stringify(preUpdate), 'application/json').catch(fail)
 
   const exportCsv = async () => {
     const entries = await db.entries.orderBy('date').toArray()
-    await saveFile(backupName('csv'), toCsv(entries, categories), 'text/csv').catch(fail)
+    await saveFile(backupName('csv'), toCsv(entries, categories, groups), 'text/csv').catch(fail)
   }
 
   const onImport = async (file: File | undefined) => {
@@ -123,7 +160,7 @@ export function Settings() {
       const backup = parseBackup(await file.text())
       alert({
         title: 'Backup einspielen?',
-        message: `${backup.entries.length} Einträge vom ${new Date(backup.exportedAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Alle aktuellen Einträge, Kategorien und Daueraufträge werden ersetzt.`,
+        message: `${backup.entries.length} Einträge vom ${new Date(backup.exportedAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Alle aktuellen Einträge, Kategorien, Daueraufträge und Abos werden ersetzt.`,
         buttons: [
           { label: 'Ersetzen', style: 'destructive', onClick: () => restoreBackup(backup).then(() => bookDueEntries()).then(() => toast('Backup eingespielt')).catch(fail) },
           { label: 'Abbrechen', style: 'strong' },
@@ -149,25 +186,31 @@ export function Settings() {
       <h2 className="section-title">Planung</h2>
       <div className="group">
         <NavRow label="Kategorien" value={String(categories.length)} onClick={() => setSub('categories')} />
+        <NavRow label="Abos" value={`${formatEuro(totals(subscriptions).month)} / Monat`} onClick={() => setSub('subscriptions')} />
         <NavRow label="Daueraufträge" value={String(standing)} onClick={() => setSub('recurring')} />
         <NavRow label="Sparziel" value={goal === null ? 'Aus' : `${goal} %`} onClick={() => setGoalOpen(true)} />
       </div>
 
       <h2 className="section-title">App</h2>
       <div className="group">
+        <NavRow label="Zugangscode und Face ID" onClick={() => setSub('security')} />
+        <NavRow label="Design" value={theme === 'hud' ? 'HUD' : 'Standard'} onClick={() => setSub('design')} />
         <NavRow label="Belegscan" value={apiKey ? 'Eingerichtet' : 'Nicht eingerichtet'} onClick={() => setSub('scan')} />
-        <NavRow label="Face ID und PIN" value={lock ? 'Ein' : 'Aus'} onClick={() => setSub('security')} />
       </div>
 
       <h2 className="section-title">Backup</h2>
       <div className="group">
-        <button className="row tint" onClick={exportJson}>Backup exportieren</button>
+        <button className="row tint" onClick={exportJson}>
+          <span className="row-main">Backup exportieren</span>
+          <span className="row-value" style={{ fontSize: 15 }}>{lastBackup ? daysAgo(lastBackup) : 'Noch nie'}</span>
+        </button>
         <button className="row tint" onClick={() => { expectSystemDialog(); importer.current?.click() }}>Backup importieren</button>
         <button className="row tint" onClick={exportCsv}>Als CSV exportieren (Excel, Numbers)</button>
+        {!!preUpdate && <button className="row tint" onClick={exportPreUpdate}>Sicherung von vor dem Update exportieren</button>}
       </div>
       <p className="section-foot">
-        Deine Daten liegen nur auf diesem iPhone. Speichere regelmäßig ein Backup in iCloud Drive, damit bei einem Handywechsel nichts verloren geht.
-        API-Schlüssel und PIN sind nicht im Backup enthalten.
+        Deine Daten liegen nur auf diesem iPhone. Das Backup ist der einzige Weg zurück, falls du deinen Zugangscode vergisst oder das Handy wechselst. Speichere es regelmäßig in iCloud Drive.
+        Das Backup selbst ist nicht verschlüsselt. API-Schlüssel und Zugangscode sind nicht enthalten.
       </p>
       <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(e) => onImport(e.target.files?.[0])} />
 

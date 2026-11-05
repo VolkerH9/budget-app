@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db, DEFAULT_CATEGORIES, type Entry, type Recurring } from '../db'
+import { prepareSetup } from './vault'
 import { bookDueEntries, countBacklog, resumeNextDue } from './booking'
 import { addMonths, dayLabel, formatDate, isValidIso, weekday } from './dates'
 import { amountToInput, displayInput, formatEuro, formatPercent, parseAmount, pressKey } from './format'
@@ -91,11 +92,13 @@ describe('Automatische Buchung', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
+    await prepareSetup()
   })
 
   it('legt die Startkategorien an', async () => {
     expect(await db.categories.count()).toBe(DEFAULT_CATEGORIES.length)
-    expect(DEFAULT_CATEGORIES.filter((c) => c.type === 'expense')).toHaveLength(12)
+    expect(DEFAULT_CATEGORIES.filter((c) => c.type === 'expense')).toHaveLength(17)
+    expect(await db.groups.count()).toBe(5)
   })
   it('bucht rückwirkend, aber nie doppelt', async () => {
     await db.recurring.add(standing())

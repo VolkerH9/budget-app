@@ -1,6 +1,6 @@
 import { addDays, addMonths, daysInMonth, toIso, weekday } from './dates'
 
-export type Interval = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+export type Interval = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'
 
 export interface Schedule {
   interval: Interval
@@ -8,9 +8,14 @@ export interface Schedule {
   bookingDay: number
   startDate: string
   endDate?: string
+  /** Interval 'custom': months between bookings */
+  everyMonths?: number
 }
 
-const MONTH_STEP: Record<Exclude<Interval, 'weekly'>, number> = { monthly: 1, quarterly: 3, yearly: 12 }
+const MONTH_STEP: Record<Exclude<Interval, 'weekly' | 'custom'>, number> = { monthly: 1, quarterly: 3, yearly: 12 }
+
+export const monthStep = (s: Pick<Schedule, 'interval' | 'everyMonths'>) =>
+  s.interval === 'custom' ? Math.max(1, s.everyMonths ?? 1) : MONTH_STEP[s.interval as keyof typeof MONTH_STEP]
 
 /** Day 31 falls on the last day of shorter months. */
 function dateInMonth(month: string, day: number): string {
@@ -27,7 +32,7 @@ export function firstOnOrAfter(s: Schedule, from: string): string {
     while (date < floor) date = addDays(date, 7)
     return date
   }
-  const step = MONTH_STEP[s.interval]
+  const step = monthStep(s)
   let month = s.startDate.slice(0, 7)
   let date = dateInMonth(month, s.bookingDay)
   while (date < floor) {
@@ -40,7 +45,7 @@ export function firstOnOrAfter(s: Schedule, from: string): string {
 /** The booking date that follows `date`. */
 export function nextAfter(s: Schedule, date: string): string {
   if (s.interval === 'weekly') return addDays(date, 7)
-  return dateInMonth(addMonths(date.slice(0, 7), MONTH_STEP[s.interval]), s.bookingDay)
+  return dateInMonth(addMonths(date.slice(0, 7), monthStep(s)), s.bookingDay)
 }
 
 /** All dates from `nextDue` up to and including `until` that are due for booking. */

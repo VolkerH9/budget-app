@@ -4,7 +4,8 @@ import { db, type Category, type Entry } from '../db'
 import { useApp, useCategories } from '../context'
 import { Icon } from '../components/Icon'
 import { AmountDisplay, Keypad } from '../components/Keypad'
-import { CategoryIcon, MonthPicker, Sheet, useMonthSwipe } from '../components/ui'
+import { MonthPicker, Sheet, useMonthSwipe } from '../components/ui'
+import { CategoryIcon } from '../components/CategoryIcon'
 import { monthRange } from '../lib/dates'
 import { amountToInput, formatEuro, formatPercent, parseAmount } from '../lib/format'
 import { budgetRows, type BudgetRow } from '../lib/stats'
@@ -27,7 +28,7 @@ export function BudgetBar({ row, onClick }: { row: BudgetRow; onClick?: () => vo
     <>
       <div className="budget-head">
         <span className="budget-name">
-          <span aria-hidden="true">{row.category.emoji}</span>
+          <CategoryIcon category={row.category} size={26} />
           <span>{row.category.name}</span>
         </span>
         <span className={`status ${row.level}`} style={{ marginTop: 0 }}>{STATUS[row.level]}</span>
@@ -51,7 +52,7 @@ function BudgetSheet({ category, onClose }: { category: Category; onClose: () =>
   const cents = parseAmount(text)
   return (
     <Sheet
-      title={`${category.emoji} ${category.name}`}
+      title={category.name}
       onClose={onClose}
       action={{ label: 'Sichern', disabled: cents === null, onClick: async () => { await db.categories.update(category.id, { budget: cents! }); onClose() } }}
     >
@@ -111,7 +112,7 @@ export function Budgets() {
           <div className="group">
             {free.map((c) => (
               <button key={c.id} className="row" onClick={() => setEditing(c)}>
-                <CategoryIcon emoji={c.emoji} color={c.color} />
+                <CategoryIcon category={c} />
                 <span className="row-main row-title">{c.name}</span>
                 <span className="row-value" style={{ fontSize: 15 }}>Festlegen</span>
                 <span className="chevron"><Icon name="right" size={16} /></span>

@@ -16,11 +16,28 @@ Persönliche Budget-App für das iPhone. Alle Daten bleiben auf dem Gerät, es g
 
 Ein Scan kostet etwa 0,05 bis 0,1 Cent (Modell Claude Haiku 5.5). Fünf Dollar reichen also für mehrere Tausend Scans. Das verkleinerte Foto geht beim Scan an Anthropic. Der Schlüssel bleibt auf dem iPhone und steht nie in diesem Projekt.
 
-## Face ID einschalten
+## Zugangscode und Face ID
 
-**Einstellungen › Face ID und PIN**: Schalte die App-Sperre ein, wähle eine 6-stellige PIN und schalte dann Face ID ein. Die PIN ist der Fallback, falls Face ID nicht klappt.
+Beim ersten Start legst du einen Zugangscode fest (mindestens 6 Zeichen). Alle Daten liegen damit verschlüsselt auf dem iPhone (AES-256, Schlüssel aus dem Code über PBKDF2). Ohne Code öffnet sich die App nicht.
 
-Die Sperre schützt vor neugierigen Blicken, ist aber keine Verschlüsselung. Daten und API-Schlüssel liegen unverschlüsselt im Speicher der App.
+- **Face ID**: Einstellungen › Zugangscode und Face ID. Der Code bleibt immer als Ersatz.
+- **Falsche Codes**: Ab dem fünften Fehlversuch wartet die App, zuerst 30 Sekunden, am Ende bis zu einer Stunde.
+- **Sperren im Hintergrund**: sofort, nach 1, 5 oder 15 Minuten.
+- **Code vergessen**: Niemand kann die Daten dann entschlüsseln. Es bleibt nur „Code vergessen?“ auf dem Sperrbildschirm: Die App wird zurückgesetzt und du spielst dein letztes Backup ein. Bewahre den Code deshalb sicher auf, zum Beispiel in der Passwörter-App.
+
+## Überkategorien, Eltern-Kosten und Auswertung
+
+- **Überkategorien**: Einstellungen › Kategorien. Überkategorien anlegen, umbenennen, löschen; eine Kategorie verschiebst du, indem du sie antippst und eine andere Überkategorie wählst.
+- **Eltern-Kosten**: Ausgaben für deine Eltern buchst du in „Eltern“, ihre Rückzahlungen in „Kostenrückzahlung Eltern“. „Offen von Eltern“ ist die Differenz. Einzelne Ausgaben hakst du in der Übersicht als erstattet ab. „Eltern-Kosten ausblenden“ nimmt beide Kategorien aus allen Summen.
+- **Auswertung**: Jahr gegen Vergleichsjahr oder zwei beliebige Monate nebeneinander.
+
+## Abos
+
+**Einstellungen › Abos**. Jedes Abo bucht sich am Abbuchungstag selbst als Ausgabe in „Abos“. Vor einer Verlängerung oder dem Ende der Kündigungsfrist zeigt die Übersicht einen Hinweis. Weil eine Web-App ohne Server keine Mitteilungen schicken kann, legt „Erinnerung in den Kalender“ zusätzlich einen Kalendertermin mit Erinnerung an.
+
+## Design
+
+**Einstellungen › Design**: Standard (hell oder dunkel wie das iPhone) oder HUD (dunkel mit leuchtenden Linien).
 
 ## Daueraufträge
 
@@ -28,7 +45,7 @@ Die Sperre schützt vor neugierigen Blicken, ist aber keine Verschlüsselung. Da
 
 ## Backup
 
-**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. API-Schlüssel und PIN sind bewusst nicht enthalten.
+**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup ist der einzige Weg zurück, wenn du den Code vergisst oder das Handy wechselst. Die Datei selbst ist nicht verschlüsselt. API-Schlüssel und Zugangscode sind bewusst nicht enthalten. Backups der ersten App-Version lassen sich weiterhin einspielen und werden dabei umgestellt.
 
 ## Für die Entwicklung
 

@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { db, type Entry } from '../db'
-import { useApp, useCategories, useMeta } from '../context'
-import { CategoryIcon, MonthPicker, Segmented, useMonthSwipe } from '../components/ui'
-import { addMonths, monthLabel, monthShort, monthRange } from '../lib/dates'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { BellRing, X } from 'lucide-react'
+import { db, PARENT_CATEGORIES, setMeta, type Entry } from '../db'
+import { useApp, useCategories, useGroups, useMeta, useRangeEntries } from '../context'
+import { CategoryIcon } from '../components/CategoryIcon'
+import { GroupSheet, previousMonthLabel, type DetailPeriods } from '../components/GroupSheet'
+import { HideParentsRow, ParentsCard } from '../components/ParentsCard'
+import { Ring } from '../components/Ring'
+import { CountUp, MonthPicker, Segmented, Trend, useMonthSwipe, useSticky, YearPicker } from '../components/ui'
+import { backupName, createBackup, markBackupDone, saveFile } from '../lib/backup'
+import { addMonths, monthLabel, monthShort, today } from '../lib/dates'
 import { formatEuro, formatPercent } from '../lib/format'
-import { budgetRows, expensesByCategory, monthlySeries, summarize, type CategoryShare, type MonthRow } from '../lib/stats'
-import { BudgetBar, useMonthEntries } from './Budgets'
+import { reminders } from '../lib/subscriptions'
+import { budgetRows, expenseSegments, inPeriod, monthlySeries, monthPeriod, summarize, withoutParents, yearPeriod, type MonthRow, type Segment } from '../lib/stats'
+import { useTheme } from '../lib/theme'
+import { BudgetBar } from './Budgets'
 
-const MAX_SLICES = 8
-
-function useDark(): boolean {
+export function useDark(): boolean {
+  const hud = useTheme() === 'hud'
   const query = useMemo(() => matchMedia('(prefers-color-scheme: dark)'), [])
   const [dark, setDark] = useState(query.matches)
   useEffect(() => {
@@ -19,79 +26,19 @@ function useDark(): boolean {
     query.addEventListener('change', onChange)
     return () => query.removeEventListener('change', onChange)
   }, [query])
-  return dark
+  return dark || hud
 }
 
-function chartColors(dark: boolean) {
+export function useChartColors() {
+  const hud = useTheme() === 'hud'
+  const dark = useDark()
+  if (hud) return { income: '#38d9f5', expense: '#f2a541', tick: 'rgba(140,225,245,.7)', grid: 'rgba(56,217,245,.16)', cursor: 'rgba(56,217,245,.1)' }
   return dark
-    ? { income: '#3987e5', expense: '#d95926', tick: 'rgba(235,235,245,.68)', grid: 'rgba(84,84,88,.5)', cursor: 'rgba(120,120,128,.2)', gap: '#1c1c1e' }
-    : { income: '#2a78d6', expense: '#eb6834', tick: 'rgba(60,60,67,.72)', grid: 'rgba(60,60,67,.14)', cursor: 'rgba(120,120,128,.12)', gap: '#ffffff' }
+    ? { income: '#4a76c8', expense: '#c86f30', tick: 'rgba(235,235,245,.6)', grid: 'rgba(84,84,88,.35)', cursor: 'rgba(120,120,128,.18)' }
+    : { income: '#4a76c8', expense: '#c86f30', tick: 'rgba(60,60,67,.6)', grid: 'rgba(60,60,67,.1)', cursor: 'rgba(120,120,128,.1)' }
 }
 
 const compactEuro = (cents: number) => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 }).format(cents / 100)
-
-interface Slice { key: string; label: string; color: string; amount: number; share: number }
-
-/** The pie stays readable: the smallest categories share one grey slice. */
-function toSlices(shares: CategoryShare[]): Slice[] {
-  const slices = shares.map(({ category, amount, share }) => ({ key: category.id, label: `${category.emoji} ${category.name}`, color: category.color, amount, share }))
-  if (slices.length <= MAX_SLICES) return slices
-  const rest = slices.slice(MAX_SLICES - 1)
-  return [...slices.slice(0, MAX_SLICES - 1), {
-    key: 'rest',
-    label: `Weitere (${rest.length})`,
-    color: '#aeaeb2',
-    amount: rest.reduce((sum, s) => sum + s.amount, 0),
-    share: rest.reduce((sum, s) => sum + s.share, 0),
-  }]
-}
-
-function ExpensePie({ shares, total }: { shares: CategoryShare[]; total: number }) {
-  const [selected, setSelected] = useState<string | null>(null)
-  const colors = chartColors(useDark())
-  const slices = toSlices(shares)
-  const active = slices.find((s) => s.key === selected)
-  return (
-    <>
-      <div className="pie-wrap">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={slices}
-              dataKey="amount"
-              nameKey="label"
-              innerRadius="62%"
-              outerRadius="96%"
-              startAngle={90}
-              endAngle={-270}
-              stroke={colors.gap}
-              strokeWidth={2}
-              isAnimationActive={false}
-              onClick={(_, index) => setSelected(slices[index].key === selected ? null : slices[index].key)}
-            >
-              {slices.map((s) => <Cell key={s.key} fill={s.color} fillOpacity={!selected || s.key === selected ? 1 : 0.35} />)}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="pie-center">
-          <small>{active ? active.label : 'Ausgaben'}</small>
-          <strong className="num">{formatEuro(active ? active.amount : total)}</strong>
-          {active && <small className="num">{formatPercent(active.share)}</small>}
-        </div>
-      </div>
-      <div style={{ margin: '10px -16px -16px' }}>
-        {shares.map(({ category, amount, share }) => (
-          <div className="row row-sep" key={category.id} style={{ background: 'none' }}>
-            <CategoryIcon emoji={category.emoji} color={category.color} />
-            <span className="row-main row-title">{category.name}</span>
-            <span className="row-sub num">{formatPercent(share)}</span>
-            <span className="num" style={{ fontWeight: 500 }}>{formatEuro(amount)}</span>
-          </div>
-        ))}
-      </div>
-    </>
-  )
-}
 
 function ChartTip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) {
   if (!active || !payload?.length) return null
@@ -100,7 +47,7 @@ function ChartTip({ active, payload, label }: { active?: boolean; payload?: { na
       <div style={{ fontWeight: 600 }}>{label && monthLabel(label)}</div>
       {payload.map((p) => (
         <div key={p.name}>
-          {payload.length > 1 && <i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, marginRight: 5, background: p.color }} />}
+          <i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, marginRight: 5, background: p.color }} />
           {p.name}: {formatEuro(p.value)}
         </div>
       ))}
@@ -108,42 +55,19 @@ function ChartTip({ active, payload, label }: { active?: boolean; payload?: { na
   )
 }
 
-function axes(colors: ReturnType<typeof chartColors>, count: number) {
-  return [
-    <CartesianGrid key="grid" vertical={false} stroke={colors.grid} strokeWidth={0.5} />,
-    <XAxis key="x" dataKey="month" tickFormatter={monthShort} axisLine={false} tickLine={false} interval={0} tick={{ fill: colors.tick, fontSize: count > 6 ? 10 : 12 }} />,
-    <YAxis key="y" tickFormatter={compactEuro} axisLine={false} tickLine={false} width={40} tick={{ fill: colors.tick, fontSize: 11 }} />,
-  ]
-}
-
-function MonthCompare({ rows, month }: { rows: MonthRow[]; month: string }) {
-  const colors = chartColors(useDark())
-  return (
-    <div style={{ height: 200 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} margin={{ top: 8, right: 0, bottom: 0, left: -6 }} barCategoryGap="28%">
-          {axes(colors, rows.length)}
-          <Tooltip content={<ChartTip />} cursor={{ fill: colors.cursor }} />
-          <Bar dataKey="expense" name="Ausgaben" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-            {rows.map((r) => <Cell key={r.month} fill={colors.income} fillOpacity={r.month === month ? 1 : 0.45} />)}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-function IncomeVsExpense({ rows }: { rows: MonthRow[] }) {
-  const colors = chartColors(useDark())
+export function IncomeVsExpense({ rows, height = 200 }: { rows: MonthRow[]; height?: number }) {
+  const colors = useChartColors()
   return (
     <>
-      <div style={{ height: 200 }}>
+      <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} margin={{ top: 8, right: 0, bottom: 0, left: -6 }} barCategoryGap="24%" barGap={2}>
-            {axes(colors, rows.length)}
+          <BarChart data={rows} margin={{ top: 8, right: 0, bottom: 0, left: 0 }} barCategoryGap="22%" barGap={2}>
+            <CartesianGrid vertical={false} stroke={colors.grid} strokeWidth={0.5} />
+            <XAxis dataKey="month" tickFormatter={monthShort} axisLine={false} tickLine={false} interval={0} tick={{ fill: colors.tick, fontSize: rows.length > 6 ? 10 : 12 }} />
+            <YAxis tickFormatter={compactEuro} axisLine={false} tickLine={false} width={46} tick={{ fill: colors.tick, fontSize: 11 }} />
             <Tooltip content={<ChartTip />} cursor={{ fill: colors.cursor }} />
-            <Bar dataKey="income" name="Einnahmen" fill={colors.income} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-            <Bar dataKey="expense" name="Ausgaben" fill={colors.expense} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey="income" name="Einnahmen" fill={colors.income} radius={[4, 4, 0, 0]} animationDuration={500} />
+            <Bar dataKey="expense" name="Ausgaben" fill={colors.expense} radius={[4, 4, 0, 0]} animationDuration={500} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -158,21 +82,21 @@ function IncomeVsExpense({ rows }: { rows: MonthRow[] }) {
 function SavingsCard({ saving, income, rate, goal }: { saving: number; income: number; rate: number | null; goal: number | null }) {
   let status = { level: 'muted', text: 'Lege in den Einstellungen ein Sparziel fest.' }
   if (rate === null) {
-    status = { level: 'muted', text: 'Ohne Einnahmen in diesem Monat gibt es keine Sparquote.' }
+    status = { level: 'muted', text: 'Ohne Einnahmen gibt es keine Sparquote.' }
   } else if (goal !== null) {
     const missing = Math.ceil((income * goal) / 100) - saving
     status = missing <= 0
       ? { level: 'ok', text: `✓ Sparziel von ${goal} % erreicht` }
-      : { level: 'warn', text: `Noch ${formatEuro(missing)} bis zum Sparziel von ${goal} %` }
+      : { level: 'muted', text: `Noch ${formatEuro(missing)} bis zum Sparziel von ${goal} %` }
   }
   return (
-    <div className="card" style={{ marginTop: 10 }}>
+    <div className="card">
       <div className="rate">
         <span className="row-sub">Sparquote</span>
         <strong className="num">{rate === null ? '–' : formatPercent(rate)}</strong>
       </div>
       {goal !== null && rate !== null && (
-        <div className="bar ok" style={{ marginTop: 8 }} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round((rate / (goal / 100)) * 100))} aria-label="Fortschritt zum Sparziel">
+        <div className="bar ok" style={{ marginTop: 10 }} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round((rate / (goal / 100)) * 100))} aria-label="Fortschritt zum Sparziel">
           <div style={{ width: `${Math.min(100, (rate / (goal / 100)) * 100)}%` }} />
         </div>
       )}
@@ -181,43 +105,142 @@ function SavingsCard({ saving, income, rate, goal }: { saving: number; income: n
   )
 }
 
+function Reminders() {
+  const { openSettings } = useApp()
+  const lead = useMeta('reminderDays', 7)
+  const dismissed = useMeta<string[]>('dismissedReminders', [])
+  const subscriptions = useLiveQuery(() => db.recurring.filter((r) => !!r.subscription).toArray(), [], [])
+  const due = reminders(subscriptions, lead).filter((r) => !dismissed.includes(r.key))
+  if (due.length === 0) return null
+  return (
+    <div className="card reminder">
+      <BellRing size={20} strokeWidth={1.8} aria-hidden="true" />
+      <button className="row-main" style={{ textAlign: 'left' }} onClick={() => openSettings('subscriptions')}>
+        <b>Abos</b>
+        {due.map((r) => <span key={r.key} className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>{r.text}</span>)}
+      </button>
+      <button className="icon-btn" aria-label="Erinnerung ausblenden" onClick={() => setMeta('dismissedReminders', [...dismissed, ...due.map((r) => r.key)].slice(-50))}>
+        <X size={18} />
+      </button>
+    </div>
+  )
+}
+
+function BackupHint() {
+  const { toast } = useApp()
+  const last = useMeta<number | null>('lastBackupAt', null)
+  const [now] = useState(() => Date.now())
+  const days = last === null ? null : Math.floor((now - last) / 86_400_000)
+  if (days !== null && days < 30) return null
+  const save = async () => {
+    await saveFile(backupName('json'), JSON.stringify(await createBackup()), 'application/json')
+    await markBackupDone()
+    toast('Backup gesichert')
+  }
+  return (
+    <div className="card hint">
+      <span className="row-main">
+        <b>{days === null ? 'Noch kein Backup' : `Letztes Backup vor ${days} Tagen`}</b>
+        <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>Ohne Backup sind deine Daten bei einem vergessenen Code verloren.</span>
+      </span>
+      <button className="secondary-btn small" onClick={save}>Sichern</button>
+    </div>
+  )
+}
+
 export function Overview() {
   const { month, setMonth, openEntry } = useApp()
   const categories = useCategories()
-  const entries = useMonthEntries(month)
+  const groups = useGroups()
   const goal = useMeta<number | null>('savingsGoal', null)
-  const [span, setSpan] = useState<'6' | '12'>('6')
+  const hide = useMeta('hideParents', false)
+  const [mode, setMode] = useSticky<'month' | 'year'>('overview-mode', 'month')
+  const [year, setYear] = useSticky('overview-year', Number(today().slice(0, 4)))
+  const [selected, setSelected] = useState<string | null>(null)
+  const [detail, setDetail] = useState<Segment | null>(null)
   const swipe = useMonthSwipe(month, setMonth)
 
-  const history = useLiveQuery(() => {
-    const [from] = monthRange(addMonths(month, -11))
-    const [, to] = monthRange(month)
-    return db.entries.where('date').between(from, to, true, true).toArray()
-  }, [month], [] as Entry[])
+  const shownYear = mode === 'month' ? Number(month.slice(0, 4)) : year
+  const current = mode === 'month' ? monthPeriod(month) : yearPeriod(year)
+  const previous = mode === 'month' ? monthPeriod(addMonths(month, -1)) : yearPeriod(year - 1)
+  const whole = yearPeriod(shownYear)
+  const chartFrom = mode === 'month' ? monthPeriod(addMonths(month, -5)).from : whole.from
+  const from = [previous.from, chartFrom, whole.from].sort()[0]
+  const loaded = useRangeEntries(from, whole.to > current.to ? whole.to : current.to)
+  const parents = useLiveQuery(() => db.entries.where('categoryId').anyOf(PARENT_CATEGORIES).toArray(), [], [] as Entry[])
 
+  const all = withoutParents(loaded, hide)
+  const entries = inPeriod(all, current)
   const summary = summarize(entries)
-  const shares = expensesByCategory(entries, categories)
+  const prevSummary = summarize(inPeriod(all, previous))
+  const segments = expenseSegments(entries, categories, groups)
   const budgets = budgetRows(entries, categories)
-  const rows = monthlySeries(history, month, Number(span))
+  const rows = mode === 'month'
+    ? monthlySeries(all, month, 6)
+    : monthlySeries(inPeriod(all, whole), `${year}-12`, 12)
+  const previousLabel = mode === 'month' ? previousMonthLabel(addMonths(month, -1)) : String(year - 1)
+  const title = mode === 'month' ? 'Ausgaben im Monat' : `Ausgaben ${year}`
+
+  const periods: DetailPeriods = {
+    mode,
+    current: entries,
+    previous: inPeriod(all, previous),
+    previousLabel,
+    year: inPeriod(all, whole),
+    yearLabel: `Jahr ${shownYear}`,
+  }
+
+  useEffect(() => setSelected(null), [mode, month, year])
 
   return (
-    <main className="page" {...swipe}>
+    <main className="page" {...(mode === 'month' ? swipe : {})}>
       <h1 className="page-title">Übersicht</h1>
-      <MonthPicker month={month} onChange={setMonth} />
+      <Segmented value={mode} options={[['month', 'Monat'], ['year', 'Jahr']]} onChange={setMode} />
+      <div style={{ height: 6 }} />
+      {mode === 'month' ? <MonthPicker month={month} onChange={setMonth} /> : <YearPicker year={year} onChange={setYear} />}
 
-      <div className="kpis">
-        <div className="kpi"><label>Einnahmen</label><strong className="num">{formatEuro(summary.income)}</strong></div>
-        <div className="kpi"><label>Ausgaben</label><strong className="num">{formatEuro(summary.expense)}</strong></div>
-        <div className="kpi"><label>Sparen</label><strong className="num">{formatEuro(summary.saving)}</strong></div>
-        <div className="kpi"><label>Rest</label><strong className={summary.rest < 0 ? 'num danger' : 'num'}>{formatEuro(summary.rest)}</strong></div>
+      <div className="card hero">
+        <span className="row-sub">{mode === 'month' ? 'Rest im Monat' : `Rest im Jahr ${year}`}</span>
+        <CountUp cents={summary.rest} className={summary.rest < 0 ? 'hero-num over' : 'hero-num'} />
+        <div className="hero-stats">
+          <div><span>Einnahmen</span><b className="num">{formatEuro(summary.income)}</b><Trend current={summary.income} previous={prevSummary.income} /></div>
+          <div><span>Ausgaben</span><b className="num">{formatEuro(summary.expense)}</b><Trend current={summary.expense} previous={prevSummary.expense} /></div>
+          <div><span>Gespart</span><b className="num saved">{formatEuro(summary.saving)}</b><Trend current={summary.saving} previous={prevSummary.saving} /></div>
+        </div>
       </div>
 
-      <SavingsCard saving={summary.saving} income={summary.income} rate={summary.savingsRate} goal={goal} />
+      <div className="stack">
+        <SavingsCard saving={summary.saving} income={summary.income} rate={summary.savingsRate} goal={goal} />
+        <Reminders />
+        <BackupHint />
+        <ParentsCard entries={parents} />
+        <div className="group"><HideParentsRow hide={hide} /></div>
+      </div>
 
-      <h2 className="section-title strong">Ausgaben nach Kategorie</h2>
+      <h2 className="section-title strong">Ausgaben nach Bereichen</h2>
       <div className="card">
-        {shares.length > 0
-          ? <ExpensePie key={month} shares={shares} total={summary.expense} />
+        {segments.length > 0
+          ? (
+            <>
+              <Ring key={`${mode}-${month}-${year}`} segments={segments} total={summary.expense} title={title} selected={selected} onSelect={setSelected} />
+              {selected && (
+                <button className="link-btn ring-detail" onClick={() => setDetail(segments.find((s) => s.key === selected) ?? null)}>
+                  Details zu {segments.find((s) => s.key === selected)?.label} ›
+                </button>
+              )}
+              <div className="legend-list">
+                {segments.map((s) => (
+                  <button key={s.key} className="legend-row" aria-pressed={s.key === selected} onClick={() => setDetail(s)}>
+                    {s.group ? <span className="dot" style={{ background: s.color }} /> : <CategoryIcon category={s.categories[0]} size={26} />}
+                    <span className="row-main row-title">{s.label}</span>
+                    <span className="row-sub num">{formatPercent(s.share)}</span>
+                    <span className="num legend-amount">{formatEuro(s.amount)}</span>
+                    <span className="chevron" aria-hidden="true">›</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )
           : (
             <div className="empty" style={{ padding: '24px 8px' }}>
               <b>Noch keine Ausgaben</b>
@@ -226,7 +249,7 @@ export function Overview() {
           )}
       </div>
 
-      {budgets.length > 0 && (
+      {mode === 'month' && budgets.length > 0 && (
         <>
           <h2 className="section-title strong">Budgets</h2>
           <div className="group">
@@ -235,19 +258,12 @@ export function Overview() {
         </>
       )}
 
-      <h2 className="section-title strong">Monate im Vergleich</h2>
-      <div style={{ marginBottom: 10 }}>
-        <Segmented value={span} options={[['6', '6 Monate'], ['12', '12 Monate']]} onChange={setSpan} />
-      </div>
-      <div className="card">
-        <div className="row-sub" style={{ marginBottom: 6 }}>Ausgaben pro Monat</div>
-        <MonthCompare rows={rows} month={month} />
-      </div>
-
-      <h2 className="section-title strong">Einnahmen und Ausgaben</h2>
+      <h2 className="section-title strong">{mode === 'month' ? 'Letzte 6 Monate' : `Monate ${year}`}</h2>
       <div className="card">
         <IncomeVsExpense rows={rows} />
       </div>
+
+      {detail && <GroupSheet segment={detail} periods={periods} title={mode === 'month' ? monthLabel(month) : `Jahr ${year}`} onClose={() => setDetail(null)} />}
     </main>
   )
 }

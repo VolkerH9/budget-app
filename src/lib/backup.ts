@@ -1,31 +1,48 @@
-import { db, getMeta, setMeta, splitFoodCategory, type Category, type Entry, type Recurring } from '../db'
+import { db, getMeta, setMeta, type Category, type Entry, type Group, type Recurring } from '../db'
 import { isValidIso, today } from './dates'
 import { expectSystemDialog } from './lockGuard'
+import { DATA_VERSION, migrateData } from './migrate'
+
+interface Settings {
+  savingsGoal: number | null
+  saveThumbnails: boolean
+  hideParents?: boolean
+  reminderDays?: number
+}
 
 export interface Backup {
   app: 'budget'
-  version: 1
+  /** Layout of the data. Files of the first app version say 1. */
+  version: number
   exportedAt: string
   categories: Category[]
+  groups?: Group[]
   entries: Entry[]
   recurring: Recurring[]
-  settings: { savingsGoal: number | null; saveThumbnails: boolean }
+  settings: Settings
 }
 
-/** API key and lock data stay out of the file on purpose: it may end up in iCloud Drive or a chat. */
+/** API key and access code stay out of the file on purpose: it may end up in iCloud Drive or a chat. */
 export async function createBackup(): Promise<Backup> {
   return {
     app: 'budget',
-    version: 1,
+    version: DATA_VERSION,
     exportedAt: new Date().toISOString(),
     categories: await db.categories.orderBy('order').toArray(),
+    groups: await db.groups.orderBy('order').toArray(),
     entries: await db.entries.orderBy('date').toArray(),
     recurring: await db.recurring.toArray(),
     settings: {
       savingsGoal: await getMeta<number | null>('savingsGoal', null),
       saveThumbnails: await getMeta('saveThumbnails', true),
+      hideParents: await getMeta('hideParents', false),
+      reminderDays: await getMeta('reminderDays', 7),
     },
   }
+}
+
+export async function markBackupDone(): Promise<void> {
+  await setMeta('lastBackupAt', Date.now())
 }
 
 const isType = (v: unknown) => v === 'expense' || v === 'saving' || v === 'income'
@@ -41,24 +58,33 @@ export function parseBackup(text: string): Backup {
   if (data?.app !== 'budget' || !Array.isArray(data.categories) || !Array.isArray(data.entries) || !Array.isArray(data.recurring)) {
     throw new Error('Diese Datei ist kein Backup dieser App.')
   }
-  if (data.version !== 1) throw new Error('Dieses Backup stammt aus einer neueren App-Version.')
+  if (!Number.isInteger(data.version) || data.version < 1) throw new Error('Diese Datei ist kein Backup dieser App.')
+  if (data.version > DATA_VERSION) throw new Error('Dieses Backup stammt aus einer neueren App-Version.')
+  if (data.groups !== undefined && (!Array.isArray(data.groups) || !data.groups.every((g) => typeof g?.id === 'string' && typeof g.name === 'string' && isType(g.type)))) {
+    throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
+  }
   const categoryIds = new Set(data.categories.map((c) => c?.id))
   const categoriesOk = data.categories.every((c) => typeof c.id === 'string' && typeof c.name === 'string' && isType(c.type))
   const entriesOk = data.entries.every((e) => typeof e.id === 'string' && isType(e.type) && isCents(e.amount) && isValidIso(e.date) && categoryIds.has(e.categoryId))
-  const recurringOk = data.recurring.every((r) => typeof r.id === 'string' && isType(r.type) && isCents(r.amount) && isValidIso(r.startDate) && isValidIso(r.nextDue) && categoryIds.has(r.categoryId))
+  // Abos without an amount yet are allowed
+  const recurringOk = data.recurring.every((r) => typeof r.id === 'string' && isType(r.type) && (isCents(r.amount) || (!!r.subscription && r.amount === 0)) && isValidIso(r.startDate) && isValidIso(r.nextDue) && categoryIds.has(r.categoryId))
   if (!categoriesOk || !entriesOk || !recurringOk) throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
   return data
 }
 
-/** Replaces all entries, categories and standing orders. */
+/** Replaces all entries, categories, overcategories, standing orders and Abos. Older files are migrated. */
 export async function restoreBackup(backup: Backup): Promise<void> {
-  await db.transaction('rw', db.categories, db.entries, db.recurring, db.meta, async () => {
-    await Promise.all([db.categories.clear(), db.entries.clear(), db.recurring.clear()])
-    await db.categories.bulkAdd(splitFoodCategory(backup.categories))
-    await db.entries.bulkAdd(backup.entries)
-    await db.recurring.bulkAdd(backup.recurring)
+  const data = migrateData({ categories: backup.categories, groups: backup.groups ?? [], entries: backup.entries, recurring: backup.recurring, meta: [] }, backup.version)
+  await db.transaction('rw', db.categories, db.groups, db.entries, db.recurring, db.meta, async () => {
+    await Promise.all([db.categories.clear(), db.groups.clear(), db.entries.clear(), db.recurring.clear()])
+    await db.groups.bulkAdd(data.groups)
+    await db.categories.bulkAdd(data.categories)
+    await db.entries.bulkAdd(data.entries)
+    await db.recurring.bulkAdd(data.recurring)
     await setMeta('savingsGoal', backup.settings?.savingsGoal ?? null)
     await setMeta('saveThumbnails', backup.settings?.saveThumbnails ?? true)
+    await setMeta('hideParents', backup.settings?.hideParents ?? false)
+    await setMeta('reminderDays', backup.settings?.reminderDays ?? 7)
   })
 }
 
@@ -70,19 +96,21 @@ function cell(value: string): string {
   return /[";\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
-export function toCsv(entries: Entry[], categories: Category[]): string {
-  const names = new Map(categories.map((c) => [c.id, c.name]))
+export function toCsv(entries: Entry[], categories: Category[], groups: Group[] = []): string {
+  const byId = new Map(categories.map((c) => [c.id, c]))
+  const groupNames = new Map(groups.map((g) => [g.id, g.name]))
   const rows = entries.map((e) => [
     e.date.split('-').reverse().join('.'),
     LABELS[e.type],
-    names.get(e.categoryId) ?? '',
+    groupNames.get(byId.get(e.categoryId)?.groupId ?? '') ?? '',
+    byId.get(e.categoryId)?.name ?? '',
     (e.amount / 100).toFixed(2).replace('.', ','),
     e.merchant ?? '',
     e.note ?? '',
     e.recurringId ? 'ja' : 'nein',
   ].map(cell).join(';'))
   // The byte order mark tells Excel the file is UTF-8; semicolons fit the German setup
-  return `﻿${['Datum;Art;Kategorie;Betrag;Händler;Notiz;Dauerauftrag', ...rows].join('\r\n')}\r\n`
+  return `﻿${['Datum;Art;Überkategorie;Kategorie;Betrag;Händler;Notiz;Dauerauftrag', ...rows].join('\r\n')}\r\n`
 }
 
 /** Opens the iPhone share sheet, falls back to a plain download on desktop. */
@@ -92,10 +120,12 @@ export async function saveFile(name: string, content: string, type: string): Pro
     expectSystemDialog()
     try {
       await navigator.share({ files: [file], title: name })
+      return
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') throw error
+      if ((error as Error).name === 'AbortError') return
+      // Share sheet not allowed here: save as a download instead
+      if ((error as Error).name !== 'NotAllowedError') throw error
     }
-    return
   }
   const url = URL.createObjectURL(file)
   const link = document.createElement('a')

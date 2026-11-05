@@ -28,7 +28,8 @@ export async function bookDueEntries(now = today()): Promise<number> {
   return db.transaction('rw', db.recurring, db.entries, async () => {
     let booked = 0
     for (const r of await db.recurring.toArray()) {
-      if (r.paused) continue
+      // Abos without an amount yet are drafts
+      if (r.paused || !(r.amount > 0)) continue
       const dates = dueDates(r, r.nextDue, now)
       if (dates.length === 0) continue
       const keys = dates.map((date) => recurringKey(r.id, date))
@@ -46,7 +47,7 @@ export async function bookDueEntries(now = today()): Promise<number> {
 }
 
 /** Number of entries a new or changed standing order would book right away. */
-export function countBacklog(r: Pick<Recurring, 'interval' | 'bookingDay' | 'startDate' | 'endDate'>, now = today()): number {
+export function countBacklog(r: Pick<Recurring, 'interval' | 'everyMonths' | 'bookingDay' | 'startDate' | 'endDate'>, now = today()): number {
   return dueDates(r, firstOnOrAfter(r, r.startDate), now).length
 }
 

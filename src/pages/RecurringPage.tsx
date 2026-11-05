@@ -4,7 +4,8 @@ import { db, newId, type EntryType, type Recurring } from '../db'
 import { useApp, useCategories } from '../context'
 import { Icon } from '../components/Icon'
 import { TYPE_OPTIONS } from '../components/EntrySheet'
-import { CategoryIcon, Segmented, Sheet, Switch } from '../components/ui'
+import { Segmented, Sheet, Switch } from '../components/ui'
+import { CategoryIcon, categoryText } from '../components/CategoryIcon'
 import { bookDueEntries, countBacklog, resumeNextDue } from '../lib/booking'
 import { formatDate, today, WEEKDAYS } from '../lib/dates'
 import { amountToInput, formatEuro, parseAmount } from '../lib/format'
@@ -14,7 +15,7 @@ import { SubPage } from './Settings'
 const INTERVALS: [Interval, string][] = [['weekly', 'Wöchentlich'], ['monthly', 'Monatlich'], ['quarterly', 'Vierteljährlich'], ['yearly', 'Jährlich']]
 
 const describe = (r: Recurring) => {
-  const interval = INTERVALS.find(([key]) => key === r.interval)![1]
+  const interval = INTERVALS.find(([key]) => key === r.interval)?.[1] ?? `Alle ${r.everyMonths} Monate`
   return r.interval === 'weekly' ? `${interval}, ${WEEKDAYS[r.bookingDay - 1]}` : `${interval}, am ${r.bookingDay}.`
 }
 
@@ -96,7 +97,7 @@ function RecurringSheet({ item, onClose }: { item?: Recurring; onClose: () => vo
         <label className="row">
           <span className="row-main">Kategorie</span>
           <select aria-label="Kategorie" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            {list.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+            {list.map((c) => <option key={c.id} value={c.id}>{categoryText(c)}</option>)}
           </select>
         </label>
       </div>
@@ -147,7 +148,7 @@ function RecurringSheet({ item, onClose }: { item?: Recurring; onClose: () => vo
 
 export function RecurringPage({ onBack }: { onBack: () => void }) {
   const categories = useCategories()
-  const items = useLiveQuery(() => db.recurring.toArray(), [], [] as Recurring[])
+  const items = useLiveQuery(() => db.recurring.filter((r) => !r.subscription).toArray(), [], [] as Recurring[])
   const [editing, setEditing] = useState<{ item?: Recurring } | null>(null)
   const sorted = [...items].sort((a, b) => a.nextDue.localeCompare(b.nextDue))
 
@@ -159,7 +160,7 @@ export function RecurringPage({ onBack }: { onBack: () => void }) {
           const ended = !!r.endDate && r.nextDue > r.endDate
           return (
             <button key={r.id} className="row" onClick={() => setEditing({ item: r })}>
-              <CategoryIcon emoji={category?.emoji ?? '❔'} color={category?.color ?? '#8e8e93'} />
+              <CategoryIcon category={category} />
               <span className="row-main">
                 <span className="row-title" style={{ display: 'block' }}>{r.name}</span>
                 <span className="row-sub" style={{ display: 'block' }}>
@@ -172,7 +173,7 @@ export function RecurringPage({ onBack }: { onBack: () => void }) {
         })}
         <button className="row tint" onClick={() => setEditing({})}><Icon name="plus" size={20} /> Neuer Dauerauftrag</button>
       </div>
-      <p className="section-foot">Fällige Daueraufträge werden beim Öffnen der App automatisch gebucht, auch rückwirkend.</p>
+      <p className="section-foot">Fällige Daueraufträge werden beim Öffnen der App automatisch gebucht, auch rückwirkend. Abos verwaltest du unter Einstellungen › Abos.</p>
       {editing && <RecurringSheet item={editing.item} onClose={() => setEditing(null)} />}
     </SubPage>
   )

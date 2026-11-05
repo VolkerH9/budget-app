@@ -3,23 +3,37 @@ import { db, requestPersistence, type Entry } from './db'
 import { Icon, type IconName } from './components/Icon'
 import { Alert, Toast } from './components/ui'
 import { EntrySheet } from './components/EntrySheet'
-import { Ctx, type AlertRequest, type AppContext } from './context'
+import { Ctx, type AlertRequest, type AppContext, type SettingsPage } from './context'
 import { bookDueEntries } from './lib/booking'
 import { monthOf, today } from './lib/dates'
+import { saving } from './lib/vault'
 import { Overview } from './pages/Overview'
 import { Entries } from './pages/Entries'
+import { Analysis } from './pages/Analysis'
 import { Budgets } from './pages/Budgets'
 import { Settings } from './pages/Settings'
 import { LockGate } from './components/LockGate'
 
-type Tab = 'overview' | 'entries' | 'budgets' | 'settings'
+type Tab = 'overview' | 'entries' | 'analysis' | 'budgets' | 'settings'
 
 const TABS: [Tab, string, IconName][] = [
   ['overview', 'Übersicht', 'overview'],
   ['entries', 'Einträge', 'list'],
+  ['analysis', 'Auswertung', 'chart'],
   ['budgets', 'Budgets', 'budget'],
   ['settings', 'Einstellungen', 'settings'],
 ]
+
+function Booking({ onBooked }: { onBooked: (count: number) => void }) {
+  useEffect(() => {
+    const book = () => { bookDueEntries().then((count) => { if (count > 0) onBooked(count) }) }
+    book()
+    const onVisible = () => { if (document.visibilityState === 'visible') book() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [onBooked])
+  return null
+}
 
 export function App() {
   const [tab, setTab] = useState<Tab>('overview')
@@ -27,22 +41,21 @@ export function App() {
   const [sheet, setSheet] = useState<{ entry?: Entry } | null>(null)
   const [toast, setToast] = useState<{ text: string; onUndo?: () => void; id: number } | null>(null)
   const [alert, setAlert] = useState<AlertRequest | null>(null)
+  const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null)
 
   const showToast = useCallback((text: string, onUndo?: () => void) => setToast({ text, onUndo, id: Date.now() }), [])
   const hideToast = useCallback(() => setToast(null), [])
+  const clearSettingsPage = useCallback(() => setSettingsPage(null), [])
+  const onBooked = useCallback((count: number) => showToast(count === 1 ? '1 Eintrag aus Dauerauftrag oder Abo gebucht' : `${count} Einträge aus Daueraufträgen und Abos gebucht`), [showToast])
 
   useEffect(() => {
     requestPersistence()
-    const book = () => {
-      bookDueEntries().then((count) => {
-        if (count > 0) showToast(count === 1 ? '1 Eintrag aus Dauerauftrag gebucht' : `${count} Einträge aus Daueraufträgen gebucht`)
-      })
-    }
-    book()
-    const onVisible = () => { if (document.visibilityState === 'visible') book() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [showToast])
+    saving.onError = () => setAlert({
+      title: 'Speichern fehlgeschlagen',
+      message: 'Eine Änderung konnte nicht auf dem iPhone gespeichert werden. Ist der Speicher voll? Sichere zur Vorsicht ein Backup.',
+      buttons: [{ label: 'OK', style: 'strong' }],
+    })
+  }, [])
 
   const ctx = useMemo<AppContext>(() => ({
     month,
@@ -54,22 +67,30 @@ export function App() {
     },
     toast: showToast,
     alert: setAlert,
-  }), [month, showToast])
+    openSettings: (page) => {
+      setSettingsPage(page ?? null)
+      setTab('settings')
+    },
+    settingsPage,
+    clearSettingsPage,
+  }), [month, showToast, settingsPage, clearSettingsPage])
 
   return (
     <Ctx.Provider value={ctx}>
-      <LockGate>
+      <LockGate onSetupDone={(checked) => showToast(`Zugangscode aktiv, ${checked} Datensätze verschlüsselt und geprüft`)}>
         <div className="app">
+          <Booking onBooked={onBooked} />
           {tab === 'overview' && <Overview />}
           {tab === 'entries' && <Entries />}
+          {tab === 'analysis' && <Analysis />}
           {tab === 'budgets' && <Budgets />}
           {tab === 'settings' && <Settings />}
           <div className="bottom">
             <nav className="tabbar" aria-label="Hauptnavigation">
               {TABS.map(([key, label, icon]) => (
                 <button key={key} className="tab" aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>
-                  <Icon name={icon} size={24} />
-                  {label}
+                  <Icon name={icon} size={23} />
+                  <span>{label}</span>
                 </button>
               ))}
             </nav>

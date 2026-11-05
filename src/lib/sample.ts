@@ -18,7 +18,9 @@ const ROWS: [string, EntryType, number, number, string, string?][] = [
   ['inc-parents', 'income', 1, 30000, 'Monatlicher Zuschuss'],
   ['sav-investitionen', 'saving', 2, 15000, 'ETF-Sparplan'],
   ['exp-abos', 'expense', 3, 1299, 'Streaming'],
-  ['exp-mobility', 'expense', 3, 5800, 'Deutschlandticket'],
+  ['exp-oepnv', 'expense', 3, 5800, 'Deutschlandticket'],
+  ['exp-mobility', 'expense', 9, 4500, 'Tanken', 'Aral'],
+  ['exp-parken', 'expense', 9, 400, 'Parkhaus'],
   ['exp-supermarkt', 'expense', 4, 4312, 'Wocheneinkauf', 'Edeka'],
   ['exp-food', 'expense', 6, 1850, 'Mittagessen', 'Mensa'],
   ['exp-drogerie', 'expense', 7, 1645, '', 'dm'],
@@ -31,7 +33,10 @@ const ROWS: [string, EntryType, number, number, string, string?][] = [
   ['exp-studium', 'expense', 23, 2450, 'Fachbuch'],
   ['exp-restaurants', 'expense', 25, 2180, 'Café', 'Balzac'],
   ['exp-supermarkt', 'expense', 27, 4730, 'Wocheneinkauf', 'Rewe'],
-  ['exp-diverse', 'expense', 28, 1500, 'Geschenk'],
+  ['exp-geschenke', 'expense', 28, 1500, 'Geburtstag Lena'],
+  ['exp-eltern', 'expense', 12, 8900, 'Bahnticket für Mama'],
+  ['inc-rueckzahlung', 'income', 20, 6000, 'Überweisung Papa'],
+  ['exp-diverse', 'expense', 26, 990, 'Haushalt'],
 ]
 
 /** Adds six months of clearly marked example data. */

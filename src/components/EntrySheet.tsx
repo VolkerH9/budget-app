@@ -1,14 +1,16 @@
 import { useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, getMeta, newId, type Category, type Entry, type EntryType } from '../db'
+import { db, getMeta, newId, PARENTS_EXPENSE, type Category, type Entry, type EntryType } from '../db'
 import { useApp, useCategories } from '../context'
 import { formatDate, today } from '../lib/dates'
 import { amountToInput, parseAmount } from '../lib/format'
+import { haptic } from '../lib/haptics'
 import { expectSystemDialog } from '../lib/lockGuard'
 import { prepareImage, scanReceipt, ScanError, type ScanResult } from '../lib/scan'
 import { Icon } from './Icon'
 import { AmountDisplay, Keypad } from './Keypad'
-import { Segmented, Sheet } from './ui'
+import { Segmented, Sheet, Switch } from './ui'
+import { CategoryIcon } from './CategoryIcon'
 
 export const TYPE_OPTIONS: [EntryType, string][] = [['expense', 'Ausgabe'], ['saving', 'Sparen'], ['income', 'Einnahme']]
 
@@ -37,6 +39,7 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
   const [note, setNote] = useState(entry?.note ?? '')
   const [merchant, setMerchant] = useState(entry?.merchant ?? '')
   const [thumbnail, setThumbnail] = useState(entry?.thumbnail)
+  const [refunded, setRefunded] = useState(entry?.refunded ?? false)
   const [scanning, setScanning] = useState(false)
   const [scanned, setScanned] = useState(false)
   const camera = useRef<HTMLInputElement>(null)
@@ -61,9 +64,11 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
       note: note.trim() || undefined,
       merchant: merchant.trim() || undefined,
       thumbnail,
+      refunded: categoryId === PARENTS_EXPENSE && refunded ? true : undefined,
     }
     if (entry) await db.entries.update(entry.id, values)
     else await db.entries.add({ ...values, id: newId(), createdAt: Date.now() })
+    haptic()
     toast(entry ? 'Änderung gespeichert' : 'Eintrag gespeichert')
     onClose()
   }
@@ -130,7 +135,7 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
       <div className="cat-strip" role="group" aria-label="Kategorie">
         {categories.map((c) => (
           <button key={c.id} className="cat-pick" aria-pressed={c.id === categoryId} onClick={() => setCategoryId(c.id)}>
-            <span style={{ fontSize: 24, lineHeight: '30px' }} aria-hidden="true">{c.emoji}</span>
+            <CategoryIcon category={c} size={32} />
             <span>{c.name}</span>
           </button>
         ))}
@@ -153,6 +158,15 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
           <input type="text" placeholder="Notiz (optional)" aria-label="Notiz" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
         </label>
       </div>
+
+      {categoryId === PARENTS_EXPENSE && (
+        <div className="form-row">
+          <div className="field grow">
+            <span style={{ flex: 1, color: 'var(--label)' }}>Von Eltern erstattet</span>
+            <Switch label="Von Eltern erstattet" checked={refunded} onChange={setRefunded} />
+          </div>
+        </div>
+      )}
 
       {(merchant || scanned) && (
         <div className="form-row">

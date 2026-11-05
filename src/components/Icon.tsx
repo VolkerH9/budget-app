@@ -1,6 +1,7 @@
 const PATHS = {
   overview: <><circle cx="12" cy="12" r="8.5" /><path d="M12 3.5V12l6 6" /></>,
   list: <><path d="M9 6.5h11M9 12h11M9 17.5h11" /><circle cx="4.5" cy="6.5" r="1" fill="currentColor" /><circle cx="4.5" cy="12" r="1" fill="currentColor" /><circle cx="4.5" cy="17.5" r="1" fill="currentColor" /></>,
+  chart: <><path d="M4 20h16" /><path d="M7 16.5v-5M12 16.5V7M17 16.5v-8" /></>,
   budget: <><rect x="3.5" y="6" width="17" height="13" rx="3" /><path d="M3.5 10.5h17M15 15h2.5" /></>,
   settings: <><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2.2" /><circle cx="9" cy="17" r="2.2" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
