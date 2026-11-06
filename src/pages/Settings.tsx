@@ -193,7 +193,7 @@ export function Settings() {
 
       <h2 className="section-title">App</h2>
       <div className="group">
-        <NavRow label="Zugangscode und Face ID" onClick={() => setSub('security')} />
+        <NavRow label="Face ID & Code" onClick={() => setSub('security')} />
         <NavRow label="Design" value={theme === 'hud' ? 'HUD' : 'Standard'} onClick={() => setSub('design')} />
         <NavRow label="Belegscan" value={apiKey ? 'Eingerichtet' : 'Nicht eingerichtet'} onClick={() => setSub('scan')} />
       </div>
@@ -209,8 +209,8 @@ export function Settings() {
         {!!preUpdate && <button className="row tint" onClick={exportPreUpdate}>Sicherung von vor dem Update exportieren</button>}
       </div>
       <p className="section-foot">
-        Deine Daten liegen nur auf diesem iPhone. Das Backup ist der einzige Weg zurück, falls du deinen Zugangscode vergisst oder das Handy wechselst. Speichere es regelmäßig in iCloud Drive.
-        Das Backup selbst ist nicht verschlüsselt. API-Schlüssel und Zugangscode sind nicht enthalten.
+        Deine Daten liegen nur auf diesem iPhone. Das Backup ist der einzige Weg zurück, falls du deinen App-Code vergisst oder das Handy wechselst. Speichere es regelmäßig in iCloud Drive.
+        Das Backup selbst ist nicht verschlüsselt. API-Schlüssel und App-Code sind nicht enthalten.
       </p>
       <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(e) => onImport(e.target.files?.[0])} />
 

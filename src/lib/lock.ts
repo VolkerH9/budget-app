@@ -36,18 +36,16 @@ export async function faceIdAvailable(): Promise<boolean> {
   return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
 }
 
-/** The iPhone can create passkeys, but not release a secret for web apps. */
-export class NoPrfError extends Error {}
-
 type PrfResults = { enabled?: boolean; results?: { first?: ArrayBuffer } }
 const prfOf = (credential: PublicKeyCredential) =>
   (credential.getClientExtensionResults() as { prf?: PrfResults }).prf
 
 /**
- * Face ID unlocks a secret that is bound to a passkey on this iPhone (WebAuthn PRF).
- * The secret, never stored anywhere, unlocks the data key.
+ * Face ID confirms with the passkey on this iPhone; if Face ID fails, iOS offers the iPhone code.
+ * With a salt the passkey also releases a secret bound to it (WebAuthn PRF), never stored anywhere.
+ * Throws when the check fails or is cancelled; returns null when there is no secret.
  */
-export async function readFaceIdSecret(credentialId: string, salt: Uint8Array<ArrayBuffer>): Promise<ArrayBuffer> {
+export async function checkFaceId(credentialId: string, salt?: Uint8Array<ArrayBuffer>): Promise<ArrayBuffer | null> {
   const credential = await navigator.credentials.get({
     publicKey: {
       challenge: random(32),
@@ -55,17 +53,15 @@ export async function readFaceIdSecret(credentialId: string, salt: Uint8Array<Ar
       allowCredentials: [{ type: 'public-key', id: fromBase64(credentialId), transports: ['internal'] }],
       userVerification: 'required',
       timeout: 60_000,
-      extensions: { prf: { eval: { first: salt } } } as AuthenticationExtensionsClientInputs,
+      ...(salt && { extensions: { prf: { eval: { first: salt } } } as AuthenticationExtensionsClientInputs }),
     },
   }) as PublicKeyCredential | null
   if (!credential) throw new Error('Face ID fehlgeschlagen')
-  const secret = prfOf(credential)?.results?.first
-  if (!secret) throw new NoPrfError('Kein Face-ID-Geheimnis erhalten')
-  return secret
+  return prfOf(credential)?.results?.first ?? null
 }
 
-/** Creates the passkey and reads its secret once. Face ID confirms both steps. */
-export async function registerFaceId(): Promise<{ credentialId: string; salt: Uint8Array<ArrayBuffer>; secret: ArrayBuffer }> {
+/** Creates the passkey and reads its secret where the iPhone offers one. Face ID confirms each step. */
+export async function registerFaceId(): Promise<{ credentialId: string; salt: Uint8Array<ArrayBuffer>; secret: ArrayBuffer | null }> {
   const salt = random(32)
   const credential = await navigator.credentials.create({
     publicKey: {
@@ -82,7 +78,7 @@ export async function registerFaceId(): Promise<{ credentialId: string; salt: Ui
   if (!credential) throw new Error('Keine Anmeldedaten erhalten')
   const credentialId = toBase64(credential.rawId)
   const prf = prfOf(credential)
-  if (prf?.enabled === false) throw new NoPrfError('Passkey ohne PRF')
-  const secret = prf?.results?.first ?? await readFaceIdSecret(credentialId, salt)
+  if (prf?.enabled === false) return { credentialId, salt, secret: null }
+  const secret = prf?.results?.first ?? await checkFaceId(credentialId, salt)
   return { credentialId, salt, secret }
 }

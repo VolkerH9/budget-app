@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db, DEFAULT_CATEGORIES, newId, type Category, type Entry, type Recurring } from '../db'
 import { bookDueEntries } from './booking'
 import {
-  changeCode, closeSession, enableFaceId, getKeyring, prepareSetup, resetDevice, setupVault, startState, store,
-  unlockWithCode, unlockWithFaceId, waitAfter, whenSaved,
+  changeCode, checkCode, closeSession, getKeyring, isSignedIn, prepareSetup, resetDevice, setupVault, signIn, signOut, startState, store,
+  unlockOnDevice, unlockWithCode, waitAfter, whenSaved,
 } from './vault'
 
 const CODE = 'Sommer2026!'
@@ -197,7 +197,7 @@ describe('Zugangscode', () => {
   })
 
   it('verlangt mindestens 6 Zeichen', async () => {
-    await expect(changeCode(CODE, '12345')).rejects.toThrow('mindestens 6')
+    await expect(changeCode('12345')).rejects.toThrow('mindestens 6')
   })
 
   it('wartet nach mehreren falschen Codes immer länger', async () => {
@@ -211,28 +211,121 @@ describe('Zugangscode', () => {
     expect(await db.entries.count()).toBe(0)
   })
 
-  it('lässt sich ändern, ohne die Daten neu zu verschlüsseln', async () => {
+  it('lässt sich im entsperrten Zustand ändern, ohne die Daten neu zu verschlüsseln', async () => {
     await db.entries.add(entry({ note: 'Pizza' }))
     await whenSaved()
     const before = (await store.vault.toArray()).map((r) => r.k).sort()
-    expect(await changeCode('falsch', 'NeuerCode1')).toBe(false)
-    expect(await changeCode(CODE, 'NeuerCode1')).toBe(true)
+    await changeCode('NeuerCode1')
     expect((await store.vault.toArray()).map((r) => r.k).sort()).toEqual(before)
+    expect(await checkCode(CODE)).toBe(false)
+    expect(await checkCode('NeuerCode1')).toBe(true)
+    // A check inside the open app counts no mistake
+    expect((await getKeyring())?.failures).toBe(0)
     await restart()
+    await expect(changeCode('Fremder-Code')).rejects.toThrow('gesperrt')
     expect((await unlockWithCode(CODE)).ok).toBe(false)
-    await store.keyring.update('main', { blockedUntil: 0 })
     expect((await unlockWithCode('NeuerCode1')).ok).toBe(true)
     expect((await db.entries.toArray())[0].note).toBe('Pizza')
   })
+})
 
-  it('entsperrt mit dem Face-ID-Geheimnis, aber nicht mit einem falschen', async () => {
-    const secret = crypto.getRandomValues(new Uint8Array(32))
-    await enableFaceId('cred', crypto.getRandomValues(new Uint8Array(32)), secret)
+describe('Angemeldetes Gerät', () => {
+  beforeEach(async () => {
+    await prepareSetup()
+    await setupVault(CODE)
+    await db.entries.add(entry({ note: 'Pizza' }))
+  })
+
+  const faceId = (secret: Uint8Array<ArrayBuffer> | null) => ({ credentialId: 'cred', prfSalt: crypto.getRandomValues(new Uint8Array(32)), secret })
+
+  it('ist nach dem Einrichten abgemeldet und sperrt nicht nach Zeit', async () => {
+    const ring = (await getKeyring())!
+    expect(isSignedIn(ring)).toBe(false)
+    expect(ring.lockAfter).toBeNull()
     await restart()
-    await expect(unlockWithFaceId(crypto.getRandomValues(new Uint8Array(32)))).rejects.toThrow()
-    expect(await db.categories.count()).toBe(0)
-    await unlockWithFaceId(secret)
-    expect(await db.categories.count()).toBe(DEFAULT_CATEGORIES.length)
+    await expect(unlockOnDevice(null)).rejects.toThrow('abgemeldet')
+  })
+
+  it('öffnet ohne Face ID mit einem Geräteschlüssel, der sich nicht exportieren lässt', async () => {
+    await signIn(null)
+    const ring = (await getKeyring())!
+    expect(isSignedIn(ring)).toBe(true)
+    expect(ring.faceId).toBeUndefined()
+    expect(ring.device?.key.extractable).toBe(false)
+    await expect(crypto.subtle.exportKey('raw', ring.device!.key)).rejects.toThrow()
+    await restart()
+    await unlockOnDevice(null)
+    expect((await db.entries.toArray())[0].note).toBe('Pizza')
+  })
+
+  it('bindet den Schlüssel an das Face-ID-Geheimnis und behält keinen Geräteschlüssel', async () => {
+    const secret = crypto.getRandomValues(new Uint8Array(32))
+    await signIn(faceId(secret))
+    const ring = (await getKeyring())!
+    expect(ring.device).toBeUndefined()
+    expect(ring.faceId?.wrapped).toBeTruthy()
+    await restart()
+    await expect(unlockOnDevice(null)).rejects.toThrow()
+    await expect(unlockOnDevice(crypto.getRandomValues(new Uint8Array(32)))).rejects.toThrow()
+    expect(await db.entries.count()).toBe(0)
+    await unlockOnDevice(secret)
+    expect((await db.entries.toArray())[0].note).toBe('Pizza')
+  })
+
+  it('nutzt Face ID ohne Geheimnis zusammen mit dem Geräteschlüssel', async () => {
+    await signIn(faceId(null))
+    const ring = (await getKeyring())!
+    expect(ring.faceId).toEqual({ credentialId: 'cred' })
+    expect(ring.device).toBeTruthy()
+    await restart()
+    await unlockOnDevice(null)
+    expect(await db.entries.count()).toBe(1)
+  })
+
+  it('wechselt zwischen Face ID und ohne Abfrage, ohne Daten zu verlieren', async () => {
+    const secret = crypto.getRandomValues(new Uint8Array(32))
+    await signIn(faceId(secret))
+    await signIn(null)
+    expect((await getKeyring())?.faceId).toBeUndefined()
+    await restart()
+    await unlockOnDevice(null)
+    await signIn(faceId(secret))
+    await restart()
+    await unlockOnDevice(secret)
+    expect(await db.entries.count()).toBe(1)
+  })
+
+  it('braucht nach dem Abmelden wieder den App-Code', async () => {
+    await signIn(null)
+    await signOut()
+    const ring = (await getKeyring())!
+    expect(isSignedIn(ring)).toBe(false)
+    expect(ring.device).toBeUndefined()
+    await restart()
+    await expect(unlockOnDevice(null)).rejects.toThrow('abgemeldet')
+    expect((await unlockWithCode(CODE)).ok).toBe(true)
+    expect((await db.entries.toArray())[0].note).toBe('Pizza')
+  })
+
+  it('übernimmt Face ID der Vorversion und schaltet die Sperre nach Zeit aus', async () => {
+    const secret = crypto.getRandomValues(new Uint8Array(32))
+    await signIn(faceId(secret))
+    await whenSaved()
+    // A keyring as the version from 5 November stored it
+    const { version: _version, ...old } = { ...(await getKeyring())!, lockAfter: 300 }
+    await store.keyring.put(old)
+    closeSession()
+    await db.delete()
+    await db.open()
+    const state = await startState()
+    expect(state.kind === 'locked' && state.keyring).toMatchObject({ lockAfter: null, version: 2 })
+    expect((await getKeyring())?.lockAfter).toBeNull()
+    await unlockOnDevice(secret)
+    expect(await db.entries.count()).toBe(1)
+    // A choice made later stays
+    await store.keyring.update('main', { lockAfter: 60 })
+    await startState()
+    expect((await getKeyring())?.lockAfter).toBe(60)
   })
 })
 

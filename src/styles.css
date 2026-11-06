@@ -2029,6 +2029,25 @@ button.cmp-row:active {
   min-height: 50px;
 }
 
+.gate .face-btn {
+  display: flex;
+  max-width: none;
+  margin-top: 8px;
+}
+
+.gate-status {
+  min-height: 20px;
+  margin: 12px 4px 0;
+  color: var(--label2);
+  font-size: 15px;
+  text-align: center;
+}
+
+.gate-skip {
+  display: block;
+  margin: 4px auto 0;
+}
+
 .privacy-cover {
   position: fixed;
   z-index: 90;

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getMeta } from '../db'
 import { backupName, markBackupDone, saveFile } from '../lib/backup'
-import { checkLegacyPin, NoPrfError, PIN_LENGTH, readFaceIdSecret, verifyLegacyFaceId } from '../lib/lock'
+import { checkFaceId, checkLegacyPin, faceIdAvailable, PIN_LENGTH, registerFaceId, verifyLegacyFaceId } from '../lib/lock'
 import { takeSystemDialog } from '../lib/lockGuard'
 import {
-  getKeyring, MIN_CODE_LENGTH, prepareSetup, resetDevice, setupVault, startState, unlockWithCode, unlockWithFaceId,
-  type LegacyLock,
+  getKeyring, isSignedIn, MIN_CODE_LENGTH, prepareSetup, resetDevice, setupVault, signIn, startState, unlockOnDevice, unlockWithCode,
+  type Keyring, type LegacyLock,
 } from '../lib/vault'
 import { Icon } from './Icon'
 import { Alert, type AlertButton } from './ui'
@@ -64,7 +64,7 @@ function LegacyLockScreen({ lock, onUnlock }: { lock: LegacyLock; onUnlock: () =
     <div className="lock" role="dialog" aria-label="App gesperrt">
       <img src={ICON} alt="" />
       <h1>Bisherige PIN</h1>
-      <p>Entsperre ein letztes Mal mit deiner bisherigen PIN. Danach legst du deinen neuen Zugangscode fest.</p>
+      <p>Entsperre ein letztes Mal mit deiner bisherigen PIN. Danach legst du deinen neuen App-Code fest.</p>
       <PinDots length={pin.length} />
       <p role="status">{message || 'PIN eingeben'}</p>
       <div className="pin-pad">
@@ -100,7 +100,7 @@ export function CodeFields({ onChange, autoFocus }: { onChange: (code: string | 
         <input type="text" name="username" autoComplete="username" value="Budget-App" readOnly hidden />
         <label className="row">
           <input className="left" type={show ? 'text' : 'password'} autoComplete="new-password" autoCapitalize="off" autoCorrect="off" spellCheck={false}
-            placeholder="Neuer Zugangscode" aria-label="Neuer Zugangscode" value={code} onChange={(e) => setCode(e.target.value)} autoFocus={autoFocus} />
+            placeholder="Neuer App-Code" aria-label="Neuer App-Code" value={code} onChange={(e) => setCode(e.target.value)} autoFocus={autoFocus} />
         </label>
         <label className="row">
           <input className="left" type={show ? 'text' : 'password'} autoComplete="new-password" autoCapitalize="off" autoCorrect="off" spellCheck={false}
@@ -153,12 +153,12 @@ function SetupScreen({ onDone }: { onDone: (checked: number) => void }) {
   }
 
   return (
-    <div className="gate" role="dialog" aria-label="Zugangscode festlegen">
+    <div className="gate" role="dialog" aria-label="App-Code festlegen">
       <div className="gate-body">
         <img src={ICON} alt="" className="gate-icon" />
-        <h1 className="gate-title">Zugangscode festlegen</h1>
+        <h1 className="gate-title">App-Code festlegen</h1>
         <p className="gate-lead">
-          Budget schützt deine Daten jetzt mit einem persönlichen Code. Sie werden damit verschlüsselt auf diesem iPhone gespeichert. Ohne den Code öffnet sich die App nicht.
+          Budget schützt deine Daten mit einem persönlichen App-Code. Sie werden damit verschlüsselt auf diesem iPhone gespeichert. Im Alltag öffnest du die App danach mit Face ID, den App-Code brauchst du nur im Notfall.
         </p>
 
         {info?.legacy && (
@@ -205,47 +205,124 @@ const countdown = (ms: number) => {
   return seconds >= 60 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} Min.` : `${seconds} Sek.`
 }
 
-function LockScreen({ onUnlock, tryFaceId }: { onUnlock: () => void; tryFaceId: boolean }) {
+/** Shown once the code opened a device that is not signed in: from now on Face ID opens the app. */
+function SignInScreen({ onDone }: { onDone: () => void }) {
+  const [available, setAvailable] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  useEffect(() => { faceIdAvailable().then(setAvailable) }, [])
+
+  const withFaceId = async () => {
+    setBusy(true)
+    setMessage('')
+    try {
+      const { credentialId, salt, secret } = await registerFaceId()
+      await signIn({ credentialId, prfSalt: salt, secret })
+      onDone()
+    } catch (error) {
+      console.error(error)
+      setBusy(false)
+      setMessage('Face ID wurde nicht eingerichtet. Versuche es noch einmal oder richte es später in den Einstellungen ein.')
+    }
+  }
+
+  const withoutFaceId = async () => {
+    await signIn(null)
+    onDone()
+  }
+
+  return (
+    <div className="gate" role="dialog" aria-label="Face ID einrichten">
+      <div className="gate-body">
+        <img src={ICON} alt="" className="gate-icon" />
+        <h1 className="gate-title">Mit Face ID öffnen</h1>
+        <p className="gate-lead">
+          Ab jetzt öffnest du Budget mit Face ID. Klappt Face ID nicht, bietet dir dein iPhone den iPhone-Code an. Den App-Code brauchst du nur noch, wenn dieses iPhone abgemeldet ist.
+        </p>
+        <div className="card gate-card warn-card">
+          <b>App-Code trotzdem aufheben</b>
+          <p>Weil du ihn nur selten brauchst, vergisst man ihn leicht. Notiere ihn zum Beispiel in der Passwörter-App.</p>
+        </div>
+        {available === false ? (
+          <>
+            <div className="card gate-card">
+              <p>Face ID ist auf diesem Gerät nicht verfügbar. Bleibt das Gerät angemeldet, öffnet sich Budget ohne Abfrage.</p>
+            </div>
+            <button className="primary-btn" onClick={withoutFaceId}>Angemeldet bleiben</button>
+          </>
+        ) : (
+          <button className="primary-btn face-btn" disabled={busy || available === null} onClick={withFaceId}>
+            <Icon name="face" size={24} width={1.6} /> {busy ? 'Wird eingerichtet …' : 'Face ID einrichten'}
+          </button>
+        )}
+        <p className="gate-status" role="status">{message}</p>
+        <button className="link-btn gate-skip" onClick={onDone}>Nicht jetzt</button>
+      </div>
+    </div>
+  )
+}
+
+function LockScreen({ onUnlock }: { onUnlock: (signInNext: boolean) => void }) {
+  const [ring, setRing] = useState<Keyring | null>(null)
+  const [withCode, setWithCode] = useState(false)
   const [code, setCode] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [blockedUntil, setBlockedUntil] = useState(0)
-  const [faceId, setFaceId] = useState<{ credentialId: string; prfSalt: Uint8Array<ArrayBuffer> } | null>(null)
   const [dialog, setDialog] = useState<Dialog>(null)
   const tried = useRef(false)
   const now = Math.max(useNow(blockedUntil > Date.now()), Date.now())
   const blocked = blockedUntil > now
-
-  const unlockFace = useCallback(async (ring: { credentialId: string; prfSalt: Uint8Array<ArrayBuffer> }) => {
-    try {
-      setBusy(true)
-      await unlockWithFaceId(await readFaceIdSecret(ring.credentialId, ring.prfSalt))
-      onUnlock()
-    } catch (error) {
-      setBusy(false)
-      setMessage(error instanceof NoPrfError ? 'Face ID konnte die App nicht entsperren. Gib deinen Code ein.' : 'Face ID hat nicht geklappt. Gib deinen Code ein.')
-    }
-  }, [onUnlock])
+  const faceId = ring?.faceId && isSignedIn(ring) ? ring.faceId : null
 
   useEffect(() => {
-    getKeyring().then((ring) => {
-      if (!ring) return
-      setBlockedUntil(ring.blockedUntil)
-      const face = ring.faceId ? { credentialId: ring.faceId.credentialId, prfSalt: ring.faceId.prfSalt as Uint8Array<ArrayBuffer> } : null
-      setFaceId(face)
-      if (face && tryFaceId && !tried.current && ring.blockedUntil < Date.now()) {
-        tried.current = true
-        unlockFace(face)
-      }
+    getKeyring().then((value) => {
+      if (!value) return
+      setRing(value)
+      setBlockedUntil(value.blockedUntil)
     })
-  }, [tryFaceId, unlockFace])
+  }, [])
+
+  const unlockFace = useCallback(async (auto: boolean) => {
+    if (!faceId) return
+    setBusy(true)
+    setMessage('')
+    try {
+      const secret = await checkFaceId(faceId.credentialId, faceId.prfSalt as Uint8Array<ArrayBuffer> | undefined)
+      if (faceId.wrapped && !secret) {
+        setBusy(false)
+        setWithCode(true)
+        setMessage('Face ID konnte die App diesmal nicht entsperren. Gib deinen App-Code ein.')
+        return
+      }
+      await unlockOnDevice(secret)
+      onUnlock(false)
+    } catch {
+      setBusy(false)
+      // Without a tap iOS may refuse the automatic request; the button is right there
+      if (!auto) setMessage('Face ID hat nicht geklappt. Versuche es noch einmal oder nimm deinen App-Code.')
+    }
+  }, [faceId, onUnlock])
+
+  // Face ID starts by itself as soon as the app is in front
+  useEffect(() => {
+    if (!faceId) return
+    const attempt = () => {
+      if (tried.current || document.visibilityState !== 'visible') return
+      tried.current = true
+      unlockFace(true)
+    }
+    attempt()
+    document.addEventListener('visibilitychange', attempt)
+    return () => document.removeEventListener('visibilitychange', attempt)
+  }, [faceId, unlockFace])
 
   const submit = async () => {
-    if (!code || busy || blocked) return
+    if (!code || busy || blocked || !ring) return
     setBusy(true)
     const result = await unlockWithCode(code)
     if (result.ok) {
-      onUnlock()
+      onUnlock(!isSignedIn(ring))
       return
     }
     setBusy(false)
@@ -255,8 +332,10 @@ function LockScreen({ onUnlock, tryFaceId }: { onUnlock: () => void; tryFaceId: 
   }
 
   const forgot = () => setDialog({
-    title: 'Code vergessen?',
-    message: 'Der Code lässt sich nicht zurücksetzen und von niemandem wiederherstellen. Genau das schützt deine Daten. Du kannst die App zurücksetzen: Dabei werden alle Daten auf diesem iPhone gelöscht. Danach legst du einen neuen Code fest und spielst in den Einstellungen dein letztes Backup ein.',
+    title: 'App-Code vergessen?',
+    message: faceId
+      ? 'Entsperre mit Face ID und lege in den Einstellungen unter „Face ID & Code“ einen neuen App-Code fest. Dafür brauchst du den alten nicht.'
+      : 'Der App-Code lässt sich nicht zurücksetzen und von niemandem wiederherstellen. Genau das schützt deine Daten. Du kannst die App zurücksetzen: Dabei werden alle Daten auf diesem iPhone gelöscht. Danach legst du einen neuen App-Code fest und spielst in den Einstellungen dein letztes Backup ein.',
     buttons: [
       {
         label: 'App zurücksetzen …',
@@ -274,6 +353,22 @@ function LockScreen({ onUnlock, tryFaceId }: { onUnlock: () => void; tryFaceId: 
     ],
   })
 
+  if (!ring) return <div className="lock" />
+
+  if (faceId && !withCode) {
+    return (
+      <div className="lock" role="dialog" aria-label="App gesperrt">
+        <img src={ICON} alt="" />
+        <h1>Budget ist gesperrt</h1>
+        <button className="primary-btn face-btn" disabled={busy} onClick={() => unlockFace(false)}>
+          <Icon name="face" size={24} width={1.6} /> Mit Face ID entsperren
+        </button>
+        <p role="status">{message || 'Klappt Face ID nicht, bietet dir dein iPhone den iPhone-Code an.'}</p>
+        <button className="link-btn" onClick={() => { setMessage(''); setWithCode(true) }}>Mit App-Code entsperren</button>
+      </div>
+    )
+  }
+
   return (
     <div className="lock" role="dialog" aria-label="App gesperrt">
       <img src={ICON} alt="" />
@@ -281,25 +376,28 @@ function LockScreen({ onUnlock, tryFaceId }: { onUnlock: () => void; tryFaceId: 
       <form className="code-form" onSubmit={(e) => { e.preventDefault(); submit() }}>
         <input type="text" name="username" autoComplete="username" value="Budget-App" readOnly hidden />
         <input className="code-input" type="password" autoComplete="current-password" autoCapitalize="off" autoCorrect="off" spellCheck={false}
-          placeholder="Zugangscode" aria-label="Zugangscode" value={code} disabled={blocked} onChange={(e) => setCode(e.target.value)} />
+          placeholder="App-Code" aria-label="App-Code" value={code} disabled={blocked} onChange={(e) => setCode(e.target.value)} />
         <button className="primary-btn" type="submit" disabled={!code || busy || blocked}>{busy ? 'Wird geprüft …' : 'Entsperren'}</button>
       </form>
       {faceId && (
-        <button className="secondary-btn face-btn" disabled={busy || blocked} onClick={() => unlockFace(faceId)}>
+        <button className="secondary-btn face-btn" disabled={busy} onClick={() => { setWithCode(false); unlockFace(false) }}>
           <Icon name="face" size={24} width={1.6} /> Mit Face ID entsperren
         </button>
       )}
       <p role="status">{blocked ? `${message ? `${message} ` : ''}Nächster Versuch in ${countdown(blockedUntil - now)}` : message}</p>
-      <button className="link-btn" onClick={forgot}>Code vergessen?</button>
+      <button className="link-btn" onClick={forgot}>App-Code vergessen?</button>
       {dialog && <Alert {...dialog} onClose={() => setDialog(null)} />}
     </div>
   )
 }
 
-type Phase = 'loading' | 'legacy' | 'setup' | 'locked' | 'open'
+type Phase = 'loading' | 'legacy' | 'setup' | 'signin' | 'locked' | 'open'
+
+/** A signed-in device without Face ID opens right away, so a lock would only flash by. */
+const opensWithoutCheck = (ring: Keyring) => isSignedIn(ring) && !ring.faceId
 
 /**
- * Nothing of the data is in the app before the code or Face ID unlocked it.
+ * Nothing of the data is in the app before the code, Face ID or the signed-in device unlocked it.
  * After a later lock the content stays mounted, so an open form survives.
  */
 export function LockGate({ children, onSetupDone }: { children: ReactNode; onSetupDone: (checked: number) => void }) {
@@ -308,20 +406,36 @@ export function LockGate({ children, onSetupDone }: { children: ReactNode; onSet
   const [loaded, setLoaded] = useState(false)
   const [covered, setCovered] = useState(false)
   const [fault, setFault] = useState('')
+  const [setupChecked, setSetupChecked] = useState<number | null>(null)
   const hiddenAt = useRef<number | null>(null)
   const systemDialog = useRef(false)
   const phaseRef = useRef(phase)
   phaseRef.current = phase
 
+  const open = useCallback(() => {
+    setLoaded(true)
+    setPhase('open')
+  }, [])
+
   useEffect(() => {
-    startState().then((state) => {
-      if (state.kind === 'locked') setPhase('locked')
-      else if (state.kind === 'legacy' && state.lock) {
+    startState().then(async (state) => {
+      if (state.kind === 'locked') {
+        if (opensWithoutCheck(state.keyring)) {
+          try {
+            await unlockOnDevice(null)
+            open()
+            return
+          } catch {
+            // The device key no longer fits: the code still opens the data
+          }
+        }
+        setPhase('locked')
+      } else if (state.kind === 'legacy' && state.lock) {
         setLegacyLock(state.lock)
         setPhase('legacy')
       } else setPhase('setup')
     }).catch((error) => setFault((error as Error).message))
-  }, [])
+  }, [open])
 
   useEffect(() => {
     const onChange = async () => {
@@ -335,7 +449,7 @@ export function LockGate({ children, onSetupDone }: { children: ReactNode; onSet
         setCovered(false)
       }
       const ring = await getKeyring()
-      if (!ring || systemDialog.current || phaseRef.current !== 'open') return
+      if (!ring || ring.lockAfter === null || opensWithoutCheck(ring) || systemDialog.current || phaseRef.current !== 'open') return
       if (document.visibilityState === 'hidden') {
         if (ring.lockAfter === 0) setPhase('locked')
       } else if (hiddenAt.current !== null && Date.now() - hiddenAt.current >= ring.lockAfter * 1000) {
@@ -346,10 +460,17 @@ export function LockGate({ children, onSetupDone }: { children: ReactNode; onSet
     return () => document.removeEventListener('visibilitychange', onChange)
   }, [])
 
-  const open = useCallback(() => {
-    setLoaded(true)
-    setPhase('open')
-  }, [])
+  const unlocked = useCallback((signInNext: boolean) => {
+    // Asked only when the app starts, not after every lock
+    if (signInNext && !loaded) setPhase('signin')
+    else open()
+  }, [loaded, open])
+
+  const signedIn = useCallback(() => {
+    open()
+    if (setupChecked !== null) onSetupDone(setupChecked)
+    setSetupChecked(null)
+  }, [open, onSetupDone, setupChecked])
 
   if (fault) {
     return (
@@ -362,11 +483,12 @@ export function LockGate({ children, onSetupDone }: { children: ReactNode; onSet
   }
   if (phase === 'loading') return null
   if (phase === 'legacy' && legacyLock) return <LegacyLockScreen lock={legacyLock} onUnlock={() => setPhase('setup')} />
-  if (phase === 'setup') return <SetupScreen onDone={(checked) => { open(); onSetupDone(checked) }} />
+  if (phase === 'setup') return <SetupScreen onDone={(checked) => { setSetupChecked(checked); setPhase('signin') }} />
+  if (phase === 'signin') return <SignInScreen onDone={signedIn} />
   return (
     <>
       {loaded && children}
-      {phase === 'locked' && <LockScreen key={hiddenAt.current ?? 0} onUnlock={open} tryFaceId={!loaded || document.visibilityState === 'visible'} />}
+      {phase === 'locked' && <LockScreen key={hiddenAt.current ?? 0} onUnlock={unlocked} />}
       {covered && phase === 'open' && <div className="privacy-cover"><img src={ICON} alt="" /></div>}
     </>
   )

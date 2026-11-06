@@ -6,9 +6,10 @@ import { DATA_VERSION, freshData, migrateData, splitFoodCategory, type DataSet }
  * Everything the app stores on the device goes through this file.
  *
  * A random data key encrypts every record with AES-GCM. The data key itself is
- * only stored wrapped: once with a key derived from the access code (PBKDF2),
- * and optionally once with a secret that only Face ID releases (WebAuthn PRF).
- * Without the code or Face ID the stored records are unreadable.
+ * only stored wrapped: always with a key derived from the access code (PBKDF2),
+ * and, while this device is signed in, once more for opening without the code:
+ * with a secret that only Face ID releases (WebAuthn PRF) where the iPhone offers
+ * one, otherwise with a device key the browser keeps and never hands out.
  */
 
 interface VaultRow {
@@ -31,12 +32,19 @@ export interface Keyring {
   salt: Bytes
   iterations: number
   byCode: Wrapped
-  faceId?: { credentialId: string; prfSalt: Bytes; wrapped: Wrapped }
+  /** Signed in without a Face ID secret: the data key, wrapped with a key that cannot be exported */
+  device?: { key: CryptoKey; wrapped: Wrapped }
+  /** Face ID before opening. With `wrapped`, only the Face ID secret releases the data key. */
+  faceId?: { credentialId: string; prfSalt?: Bytes; wrapped?: Wrapped }
   failures: number
   blockedUntil: number
-  /** Seconds in the background before the app locks, 0 = right away */
-  lockAfter: number
+  /** Seconds in the background before the app locks, 0 = right away, null = never */
+  lockAfter: number | null
+  /** 2 since the sign-in on the device */
+  version?: number
 }
+
+export const isSignedIn = (ring: Keyring) => !!ring.device || !!ring.faceId?.wrapped
 
 /** Settings and PIN of the version without encryption */
 export interface LegacyLock {
@@ -228,9 +236,17 @@ export async function whenSaved(): Promise<void> {
 
 export type StartState = { kind: 'fresh' } | { kind: 'legacy'; lock: LegacyLock | null } | { kind: 'locked'; keyring: Keyring }
 
+/** Keyrings from before the sign-in on the device: Face ID stays, the time lock goes off. */
+async function upgradeKeyring(ring: Keyring): Promise<Keyring> {
+  if ((ring.version ?? 1) >= 2) return ring
+  const next: Keyring = { ...ring, lockAfter: null, version: 2 }
+  await store.keyring.put(next)
+  return next
+}
+
 export async function startState(): Promise<StartState> {
   const keyring = await store.keyring.get('main')
-  if (keyring) return { kind: 'locked', keyring }
+  if (keyring) return { kind: 'locked', keyring: await upgradeKeyring(keyring) }
   const legacy = (await store.categories.count()) > 0 || (await store.entries.count()) > 0
   if (!legacy) return { kind: 'fresh' }
   const lock = await store.meta.get('lock')
@@ -279,7 +295,7 @@ const withVersion = (data: DataSet): DataSet => ({
  */
 export async function prepareSetup(): Promise<{ entries: number; recurring: number; legacy: boolean }> {
   const state = await startState()
-  if (state.kind === 'locked') throw new Error('Der Zugangscode ist bereits eingerichtet.')
+  if (state.kind === 'locked') throw new Error('Der App-Code ist bereits eingerichtet.')
   let data: DataSet
   if (state.kind === 'legacy') {
     const legacy = await readLegacy()
@@ -308,7 +324,7 @@ export async function setupVault(code: string): Promise<{ checked: number }> {
   const salt = random(16)
   const keyring: Keyring = {
     id: 'main', salt, iterations: ITERATIONS, byCode: await wrap(key, await codeKey(code, salt, ITERATIONS)),
-    failures: 0, blockedUntil: 0, lockAfter: 300,
+    failures: 0, blockedUntil: 0, lockAfter: null, version: 2,
   }
   const data = await snapshot()
   const rows: VaultRow[] = []
@@ -385,38 +401,77 @@ export async function unlockWithCode(code: string): Promise<UnlockResult> {
   return { ok: true }
 }
 
-export async function unlockWithFaceId(secret: BufferSource): Promise<void> {
+/**
+ * Opens on a signed-in device. Face ID, if switched on, was confirmed before;
+ * `secret` is what it released, needed when the data key is bound to it.
+ */
+export async function unlockOnDevice(secret: BufferSource | null): Promise<void> {
   const keyring = (await store.keyring.get('main'))!
-  if (!keyring.faceId) throw new Error('Face ID ist nicht eingerichtet.')
-  const key = await unwrap(keyring.faceId.wrapped, await faceIdKey(secret))
+  let key: CryptoKey
+  if (keyring.faceId?.wrapped) {
+    if (!secret) throw new Error('Face ID hat kein Geheimnis geliefert.')
+    key = await unwrap(keyring.faceId.wrapped, await faceIdKey(secret))
+  } else if (keyring.device) {
+    key = await unwrap(keyring.device.wrapped, keyring.device.key)
+  } else {
+    throw new Error('Dieses Gerät ist abgemeldet.')
+  }
   if (keyring.failures > 0) await store.keyring.update('main', { failures: 0, blockedUntil: 0 })
   if (!dataKey) await open(key)
 }
 
-export async function enableFaceId(credentialId: string, prfSalt: Bytes, secret: BufferSource): Promise<void> {
-  if (!dataKey) throw new Error('Die App ist gesperrt.')
-  await store.keyring.update('main', { faceId: { credentialId, prfSalt, wrapped: await wrap(dataKey, await faceIdKey(secret)) } })
+export interface FaceIdSetup {
+  credentialId: string
+  prfSalt: Bytes
+  /** null when the iPhone confirms Face ID but releases no secret */
+  secret: BufferSource | null
 }
 
-export const disableFaceId = () => store.keyring.update('main', { faceId: undefined })
+/**
+ * Keeps this device signed in, so the app opens without the access code.
+ * With Face ID the app asks for it first; with its secret the data key is bound to it.
+ */
+export async function signIn(face: FaceIdSetup | null): Promise<void> {
+  if (!dataKey) throw new Error('Die App ist gesperrt.')
+  if (face?.secret) {
+    const wrapped = await wrap(dataKey, await faceIdKey(face.secret))
+    await store.keyring.update('main', { device: undefined, faceId: { credentialId: face.credentialId, prfSalt: face.prfSalt, wrapped } })
+    return
+  }
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey'])
+  await store.keyring.update('main', {
+    device: { key, wrapped: await wrap(dataKey, key) },
+    faceId: face ? { credentialId: face.credentialId } : undefined,
+  })
+}
+
+/** After this only the access code opens the app on this device. */
+export const signOut = () => store.keyring.update('main', { device: undefined, faceId: undefined })
 
 export const getKeyring = () => store.keyring.get('main')
 
-export const setLockAfter = (seconds: number) => store.keyring.update('main', { lockAfter: seconds })
+export const setLockAfter = (seconds: number | null) => store.keyring.update('main', { lockAfter: seconds })
 
-/** The data stays as it is; only the wrapping of the data key changes. */
-export async function changeCode(oldCode: string, newCode: string): Promise<boolean> {
-  if (newCode.length < MIN_CODE_LENGTH) throw new Error(`Der Code braucht mindestens ${MIN_CODE_LENGTH} Zeichen.`)
+/** Checks the code without counting a mistake, for confirmations inside the unlocked app. */
+export async function checkCode(code: string): Promise<boolean> {
   const keyring = (await store.keyring.get('main'))!
-  let key: CryptoKey
   try {
-    key = await unwrap(keyring.byCode, await codeKey(oldCode, keyring.salt, keyring.iterations))
+    await unwrap(keyring.byCode, await codeKey(code, keyring.salt, keyring.iterations))
+    return true
   } catch {
     return false
   }
+}
+
+/**
+ * Sets a new code while the app is unlocked, so a forgotten code can be replaced.
+ * The data stays as it is; only the wrapping of the data key changes.
+ */
+export async function changeCode(newCode: string): Promise<void> {
+  if (newCode.length < MIN_CODE_LENGTH) throw new Error(`Der Code braucht mindestens ${MIN_CODE_LENGTH} Zeichen.`)
+  if (!dataKey) throw new Error('Die App ist gesperrt.')
   const salt = random(16)
-  await store.keyring.update('main', { salt, iterations: ITERATIONS, byCode: await wrap(key, await codeKey(newCode, salt, ITERATIONS)) })
-  return true
+  await store.keyring.update('main', { salt, iterations: ITERATIONS, byCode: await wrap(dataKey, await codeKey(newCode, salt, ITERATIONS)), failures: 0, blockedUntil: 0 })
 }
 
 /** Forgets the key, as when the app is closed. The data on the device stays. */

@@ -77,7 +77,7 @@ export function App() {
 
   return (
     <Ctx.Provider value={ctx}>
-      <LockGate onSetupDone={(checked) => showToast(`Zugangscode aktiv, ${checked} Datensätze verschlüsselt und geprüft`)}>
+      <LockGate onSetupDone={(checked) => showToast(`App-Code aktiv, ${checked} Datensätze verschlüsselt und geprüft`)}>
         <div className="app">
           <Booking onBooked={onBooked} />
           {tab === 'overview' && <Overview />}
