@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { db, requestPersistence, type Entry } from './db'
+import { db, PARENTS_REFUND, requestPersistence, type Entry } from './db'
 import { Icon, type IconName } from './components/Icon'
 import { Alert, Toast } from './components/ui'
 import { EntrySheet } from './components/EntrySheet'
+import { RefundSheet } from './components/ParentsCard'
+import { ReportSheet, type ReportKind } from './components/ReportSheet'
 import { Ctx, type AlertRequest, type AppContext, type SettingsPage } from './context'
 import { bookDueEntries } from './lib/booking'
 import { monthOf, today } from './lib/dates'
@@ -42,10 +44,19 @@ export function App() {
   const [toast, setToast] = useState<{ text: string; onUndo?: () => void; id: number } | null>(null)
   const [alert, setAlert] = useState<AlertRequest | null>(null)
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null)
+  const [refund, setRefund] = useState<Entry | null>(null)
+  const [report, setReport] = useState<{ month?: string; kind?: ReportKind } | null>(null)
+
+  /** A new repayment from the parents asks which open expenses it covers */
+  const onSaved = useCallback((saved: Entry, before?: Entry) => {
+    const isRefund = (e?: Entry) => e?.type === 'income' && e.categoryId === PARENTS_REFUND
+    if (isRefund(saved) && !isRefund(before)) setRefund(saved)
+  }, [])
 
   const showToast = useCallback((text: string, onUndo?: () => void) => setToast({ text, onUndo, id: Date.now() }), [])
   const hideToast = useCallback(() => setToast(null), [])
   const clearSettingsPage = useCallback(() => setSettingsPage(null), [])
+  const closeRefund = useCallback(() => setRefund(null), [])
   const onBooked = useCallback((count: number) => showToast(count === 1 ? '1 Eintrag aus Dauerauftrag oder Abo gebucht' : `${count} Einträge aus Daueraufträgen und Abos gebucht`), [showToast])
 
   useEffect(() => {
@@ -73,6 +84,7 @@ export function App() {
     },
     settingsPage,
     clearSettingsPage,
+    openReport: (options) => setReport(options ?? {}),
   }), [month, showToast, settingsPage, clearSettingsPage])
 
   return (
@@ -96,7 +108,9 @@ export function App() {
             </nav>
             <button className="fab" aria-label="Neuer Eintrag" onClick={() => setSheet({})}><Icon name="plus" size={30} width={2.4} /></button>
           </div>
-          {sheet && <EntrySheet entry={sheet.entry} onClose={() => setSheet(null)} />}
+          {sheet && <EntrySheet entry={sheet.entry} onClose={() => setSheet(null)} onSaved={onSaved} />}
+          {refund && <RefundSheet refund={refund} onClose={closeRefund} />}
+          {report && <ReportSheet month={report.month} kind={report.kind} onClose={() => setReport(null)} />}
           {toast && <Toast key={toast.id} text={toast.text} onUndo={toast.onUndo} onDone={hideToast} />}
           {alert && <Alert {...alert} onClose={() => setAlert(null)} />}
         </div>

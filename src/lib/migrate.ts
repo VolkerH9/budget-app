@@ -2,7 +2,7 @@ import { DEFAULT_CATEGORIES, DEFAULT_GROUPS, newId, SUBSCRIPTION_CATEGORY, type 
 import { today } from './dates'
 
 /** Version of the stored data layout. Raise it together with a new step in `migrateData`. */
-export const DATA_VERSION = 3
+export const DATA_VERSION = 4
 
 export interface DataSet {
   categories: Category[]
@@ -81,11 +81,16 @@ function toVersion3(data: DataSet, now: string): DataSet {
   }
 }
 
+/** "Kino & Freizeit" is now just "Freizeit". Its entries keep the category id, so they move along. */
+export const renameLeisure = (categories: Category[]): Category[] =>
+  categories.map((c) => (c.type === 'expense' && c.name === 'Kino & Freizeit' ? { ...c, name: 'Freizeit' } : c))
+
 /** Brings data of an older version up to date. Entries keep their ids and categories. */
 export function migrateData(data: DataSet, from: number, now = today()): DataSet {
   let result = data
   if (from < 2) result = { ...result, categories: splitFoodCategory(result.categories) }
   if (from < 3) result = toVersion3(result, now)
+  if (from < 4) result = { ...result, categories: renameLeisure(result.categories) }
   return result
 }
 

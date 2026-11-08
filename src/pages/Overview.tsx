@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { BellRing, X } from 'lucide-react'
+import { Archive, BellRing, FileText, X } from 'lucide-react'
 import { db, PARENT_CATEGORIES, setMeta, type Entry } from '../db'
 import { useApp, useCategories, useGroups, useMeta, useRangeEntries } from '../context'
 import { CategoryIcon } from '../components/CategoryIcon'
@@ -9,8 +9,10 @@ import { GroupSheet, previousMonthLabel, type DetailPeriods } from '../component
 import { HideParentsRow, ParentsCard } from '../components/ParentsCard'
 import { Ring } from '../components/Ring'
 import { CountUp, MonthPicker, Segmented, Trend, useMonthSwipe, useSticky, YearPicker } from '../components/ui'
-import { backupName, createBackup, markBackupDone, saveFile } from '../lib/backup'
-import { addMonths, monthLabel, monthShort, today } from '../lib/dates'
+import { useBackupExport } from '../components/BackupExport'
+import { REPORT_DONE } from '../components/ReportSheet'
+import { backupState, parentsReportDue } from '../lib/reminders'
+import { addMonths, formatTime, monthLabel, monthShort, today } from '../lib/dates'
 import { formatEuro, formatPercent } from '../lib/format'
 import { reminders } from '../lib/subscriptions'
 import { budgetRows, expenseSegments, inPeriod, monthlySeries, monthPeriod, summarize, withoutParents, yearPeriod, type MonthRow, type Segment } from '../lib/stats'
@@ -126,24 +128,46 @@ function Reminders() {
   )
 }
 
+/** Monthly backup reminder; between reminders a quiet hint once the last backup is 30 days old. */
 function BackupHint() {
-  const { toast } = useApp()
   const last = useMeta<number | null>('lastBackupAt', null)
-  const [now] = useState(() => Date.now())
-  const days = last === null ? null : Math.floor((now - last) / 86_400_000)
-  if (days !== null && days < 30) return null
-  const save = async () => {
-    await saveFile(backupName('json'), JSON.stringify(await createBackup()), 'application/json')
-    await markBackupDone()
-    toast('Backup gesichert')
-  }
+  const enabled = useMeta('backupReminder', true)
+  const day = useMeta('backupDay', 1)
+  const dismissed = useMeta<string | null>('backupReminderDismissed', null)
+  const backup = useBackupExport()
+  const state = backupState(today(), last, { enabled, day, dismissed })
+  if (!state.reminder && !state.stale) return null
+  const since = last === null ? 'Noch kein Backup' : `Letztes Backup: ${formatTime(last)}`
   return (
-    <div className="card hint">
-      <span className="row-main">
-        <b>{days === null ? 'Noch kein Backup' : `Letztes Backup vor ${days} Tagen`}</b>
-        <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>Ohne Backup sind deine Daten bei einem vergessenen Code verloren.</span>
-      </span>
-      <button className="secondary-btn small" onClick={save}>Sichern</button>
+    <div className={state.reminder ? 'card reminder' : 'card hint'}>
+      {state.reminder && <Archive size={20} strokeWidth={1.8} aria-hidden="true" />}
+      <button className="row-main" style={{ textAlign: 'left' }} disabled={backup.busy} onClick={backup.run}>
+        <b>{state.reminder ? 'Zeit für dein Backup' : last === null ? 'Noch kein Backup' : `Letztes Backup vor ${state.days} Tagen`}</b>
+        <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>
+          {backup.busy ? 'Backup wird erstellt …' : state.reminder ? `${since}. Antippen sichert alles samt Fotos, verschlüsselt mit deinem App-Code.` : 'Deine Daten und Fotos liegen nur auf diesem iPhone.'}
+        </span>
+      </button>
+      {state.reminder
+        ? <button className="icon-btn" aria-label="Erinnerung für diesen Monat ausblenden" onClick={() => setMeta('backupReminderDismissed', today().slice(0, 7))}><X size={18} /></button>
+        : <button className="secondary-btn small" disabled={backup.busy} onClick={backup.run}>Sichern</button>}
+    </div>
+  )
+}
+
+function ParentsReportHint({ parents }: { parents: Entry[] }) {
+  const { openReport } = useApp()
+  const enabled = useMeta('parentsReminder', true)
+  const done = useMeta<string[]>(REPORT_DONE, [])
+  const month = parentsReportDue(today(), parents, done, enabled)
+  if (!month) return null
+  return (
+    <div className="card reminder">
+      <FileText size={20} strokeWidth={1.8} aria-hidden="true" />
+      <button className="row-main" style={{ textAlign: 'left' }} onClick={() => openReport({ month, kind: 'parents' })}>
+        <b>Abrechnung Eltern für {monthLabel(month).split(' ')[0]} erstellen?</b>
+        <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>PDF mit allen Posten und Belegen zum Teilen</span>
+      </button>
+      <button className="icon-btn" aria-label="Erinnerung ausblenden" onClick={() => setMeta(REPORT_DONE, [...done, month].slice(-36))}><X size={18} /></button>
     </div>
   )
 }
@@ -213,6 +237,7 @@ export function Overview() {
         <SavingsCard saving={summary.saving} income={summary.income} rate={summary.savingsRate} goal={goal} />
         <Reminders />
         <BackupHint />
+        <ParentsReportHint parents={parents} />
         <ParentsCard entries={parents} />
         <div className="group"><HideParentsRow hide={hide} /></div>
       </div>

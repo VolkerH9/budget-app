@@ -2,6 +2,8 @@ import Dexie, { type DBCoreMutateRequest, type DBCoreMutateResponse, type Table 
 import { db, TABLES, type Category, type Entry, type Meta, type Recurring, type TableName } from '../db'
 import { DATA_VERSION, freshData, migrateData, splitFoodCategory, type DataSet } from './migrate'
 
+export type Bytes = Uint8Array<ArrayBuffer>
+
 /**
  * Everything the app stores on the device goes through this file.
  *
@@ -20,9 +22,7 @@ interface VaultRow {
   d: ArrayBuffer
 }
 
-type Bytes = Uint8Array<ArrayBuffer>
-
-interface Wrapped {
+export interface Wrapped {
   iv: Bytes
   key: ArrayBuffer
 }
@@ -61,6 +61,14 @@ export const store = new Dexie('budget') as Dexie & {
   meta: Table<Meta, string>
   vault: Table<VaultRow, string>
   keyring: Table<Keyring, string>
+  photos: Table<PhotoRow, string>
+}
+
+interface PhotoRow {
+  id: string
+  iv: Bytes
+  /** The encrypted JPEG */
+  d: ArrayBuffer
 }
 
 store.version(1).stores({
@@ -76,6 +84,9 @@ store.version(2).upgrade(async (tx) => {
 })
 
 store.version(3).stores({ vault: 'k, t', keyring: 'id' })
+
+// Receipt photos are large, so they stay out of the copy in memory and are read when shown
+store.version(4).stores({ photos: 'id' })
 
 export const ITERATIONS = 600_000
 export const MIN_CODE_LENGTH = 6
@@ -363,16 +374,95 @@ async function open(key: CryptoKey) {
   for (const row of rows) (data[row.t] as unknown[]).push(await decryptRow(key, row))
   const version = (data.meta.find((m) => m.key === 'dataVersion')?.value as number | undefined) ?? DATA_VERSION
   const migrated = version < DATA_VERSION
-  await fill(migrated ? withVersion(migrateData(data, version)) : data)
+  const current = migrated ? withVersion(migrateData(data, version)) : data
+  await fill(current)
   dataKey = key
   tracking = true
   if (migrated) {
     TABLES.forEach((t) => resync.add(t))
     scheduleFlush()
   }
+  await prunePhotos(current.entries).catch((error) => console.error(error))
 }
 
 export const isOpen = () => dataKey !== null
+
+// ---- Receipt photos ----
+
+const photoAad = (id: string) => text.encode(`photos/${id}`)
+
+function openKey(): CryptoKey {
+  if (!dataKey) throw new Error('Die App ist gesperrt.')
+  return dataKey
+}
+
+export async function savePhotos(photos: { id: string; data: Blob }[]): Promise<void> {
+  if (photos.length === 0) return
+  const key = openKey()
+  const rows: PhotoRow[] = []
+  for (const p of photos) {
+    const iv = random(12)
+    rows.push({ id: p.id, iv, d: await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: photoAad(p.id) }, key, await p.data.arrayBuffer()) })
+  }
+  await store.photos.bulkPut(rows)
+}
+
+/** The photo as JPEG, null when it is not on the device. */
+export async function loadPhoto(id: string): Promise<Blob | null> {
+  const key = openKey()
+  const row = await store.photos.get(id)
+  if (!row) return null
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: row.iv, additionalData: photoAad(id) }, key, row.d)
+  return new Blob([plain], { type: 'image/jpeg' })
+}
+
+export const deletePhotos = (ids: string[]) => store.photos.bulkDelete(ids)
+
+/**
+ * Removes photos no entry refers to any more. Deleting an entry keeps its photos
+ * for Rückgängig, so this runs when the app opens.
+ */
+export async function prunePhotos(entries: Entry[]): Promise<number> {
+  const used = new Set(entries.flatMap((e) => e.photos ?? []))
+  const stale = (await store.photos.toCollection().primaryKeys()).filter((id) => !used.has(id))
+  await store.photos.bulkDelete(stale)
+  return stale.length
+}
+
+// ---- Backup files ----
+
+export interface Sealed {
+  salt: Bytes
+  iterations: number
+  /** The data key, wrapped with the access code exactly as on the device */
+  byCode: Wrapped
+  iv: Bytes
+  data: ArrayBuffer
+}
+
+/** Encrypts a backup so that only the current access code opens it. */
+export async function seal(plain: Bytes): Promise<Sealed> {
+  const key = openKey()
+  const keyring = (await store.keyring.get('main'))!
+  const iv = random(12)
+  const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: text.encode('budget-backup') }, key, plain)
+  return { salt: keyring.salt, iterations: keyring.iterations, byCode: keyring.byCode, iv, data }
+}
+
+/** Opens a backup with the access code that was valid when it was made. Throws when the code is wrong. */
+export async function unseal(sealed: Sealed, code: string): Promise<ArrayBuffer> {
+  let key: CryptoKey
+  try {
+    key = await unwrap(sealed.byCode, await codeKey(code, sealed.salt, sealed.iterations))
+  } catch {
+    throw new Error('Der App-Code passt nicht zu diesem Backup. Nimm den Code, der beim Erstellen des Backups galt.')
+  }
+  try {
+    return await crypto.subtle.decrypt({ name: 'AES-GCM', iv: sealed.iv, additionalData: text.encode('budget-backup') }, key, sealed.data)
+  } catch {
+    throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
+  }
+}
 
 /** Waiting time after a number of wrong codes in a row */
 export function waitAfter(failures: number): number {

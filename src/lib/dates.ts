@@ -54,6 +54,9 @@ export function formatDate(iso: string): string {
   return `${d}.${m}.${y}`
 }
 
+/** "08.11.2026" for a timestamp */
+export const formatTime = (time: number) => formatDate(today(new Date(time)))
+
 /** Section title in the entry list, e.g. "Heute" or "Mo., 03.11.2026" */
 export function dayLabel(iso: string, now = today()): string {
   if (iso === now) return 'Heute'

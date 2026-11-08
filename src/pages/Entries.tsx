@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { Paperclip } from 'lucide-react'
 import { db, PARENTS_EXPENSE, type Category, type Entry, type EntryType } from '../db'
 import { useApp, useCategories } from '../context'
 import { Icon } from '../components/Icon'
+import { PhotoViewer } from '../components/PhotoViewer'
 import { SwipeRow } from '../components/SwipeRow'
 import { MonthPicker } from '../components/ui'
 import { CategoryIcon, categoryText } from '../components/CategoryIcon'
-import { dayLabel, monthRange } from '../lib/dates'
+import { dayLabel, formatDate, monthRange } from '../lib/dates'
 import { formatEuro } from '../lib/format'
 
 const TYPE_CHIPS: [EntryType | 'all', string][] = [['all', 'Alle'], ['expense', 'Ausgaben'], ['saving', 'Sparen'], ['income', 'Einnahmen']]
@@ -18,25 +20,39 @@ export function EntryAmount({ entry }: { entry: Entry }) {
 
 function EntryRow({ entry, category }: { entry: Entry; category?: Category }) {
   const { openEntry, deleteEntry } = useApp()
+  const [viewing, setViewing] = useState(false)
   const detail = entry.merchant && entry.note ? `${entry.merchant} · ${entry.note}` : entry.merchant || entry.note
+  const photos = useMemo(() => (entry.photos ?? []).map((id) => ({ id })), [entry.photos])
   return (
-    <SwipeRow onEdit={() => openEntry(entry)} onDelete={() => deleteEntry(entry)}>
-      <button className="row" onClick={() => openEntry(entry)}>
-        <CategoryIcon category={category} />
-        <span className="row-main">
-          <span className="row-title" style={{ display: 'block' }}>{category?.name ?? 'Ohne Kategorie'}</span>
-          {(detail || entry.recurringId || entry.refunded) && (
-            <span className="row-sub" style={{ display: 'block' }}>
-              {entry.recurringId && <span className="badge">Dauerauftrag</span>}
-              {entry.categoryId === PARENTS_EXPENSE && entry.refunded && <span className="badge">Erstattet</span>}
-              {detail}
-            </span>
-          )}
-        </span>
-        {entry.thumbnail && <img className="thumb" src={entry.thumbnail} alt="Beleg" />}
-        <EntryAmount entry={entry} />
-      </button>
-    </SwipeRow>
+    <>
+      <SwipeRow onEdit={() => openEntry(entry)} onDelete={() => deleteEntry(entry)}>
+        {/* The whole row opens the entry; the paperclip on top of it opens the photo */}
+        <div className="row entry-row">
+          <CategoryIcon category={category} />
+          <span className="row-main">
+            <button className="row-link row-title" onClick={() => openEntry(entry)}>{category?.name ?? 'Ohne Kategorie'}</button>
+            {(detail || entry.recurringId || entry.refunded) && (
+              <span className="row-sub" style={{ display: 'block' }}>
+                {entry.recurringId && <span className="badge">Dauerauftrag</span>}
+                {entry.categoryId === PARENTS_EXPENSE && entry.refunded && <span className="badge">Erstattet</span>}
+                {detail}
+              </span>
+            )}
+          </span>
+          {photos.length > 0
+            ? (
+              <button className="clip-btn" aria-label={photos.length === 1 ? 'Beleg ansehen' : `${photos.length} Belege ansehen`} onClick={() => setViewing(true)}>
+                <Paperclip size={17} strokeWidth={2} aria-hidden="true" />
+                {photos.length > 1 && <span className="num">{photos.length}</span>}
+              </button>
+            )
+            : entry.thumbnail && <img className="thumb" src={entry.thumbnail} alt="Beleg" />}
+          <EntryAmount entry={entry} />
+        </div>
+      </SwipeRow>
+      {/* Outside the row, so its swipe does not react to gestures in the viewer */}
+      {viewing && <PhotoViewer photos={photos} caption={`${formatDate(entry.date)} · ${formatEuro(entry.amount)} · ${category?.name ?? ''}`} onClose={() => setViewing(false)} />}
+    </>
   )
 }
 

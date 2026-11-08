@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Category, type Entry, type Group } from './db'
 import type { AlertButton } from './components/ui'
+import type { AskToShare } from './lib/backup'
 
 export interface AlertRequest {
   title: string
@@ -25,10 +26,22 @@ export interface AppContext {
   /** Page the settings tab should show once, then cleared */
   settingsPage: SettingsPage | null
   clearSettingsPage: () => void
+  /** Opens "Monatsabrechnung als PDF", optionally for a month and variant */
+  openReport: (options?: { month?: string; kind?: 'parents' | 'month' }) => void
 }
 
 export const Ctx = createContext<AppContext>(null as unknown as AppContext)
 export const useApp = () => useContext(Ctx)
+
+/** Second tap for the share sheet, for files that took a while to prepare */
+export function useAskToShare(): AskToShare {
+  const { alert } = useApp()
+  return (share, cancel) => alert({
+    title: 'Datei ist fertig',
+    message: 'Tippe auf „Teilen“, um sie zu sichern oder zu senden.',
+    buttons: [{ label: 'Teilen', style: 'strong', onClick: share }, { label: 'Abbrechen', onClick: cancel }],
+  })
+}
 
 export function useCategories(): Category[] {
   return useLiveQuery(() => db.categories.orderBy('order').toArray(), [], [] as Category[])

@@ -4,8 +4,10 @@ import { db, requestPersistence, setMeta } from '../db'
 import { useApp, useCategories, useGroups, useMeta, type SettingsPage } from '../context'
 import { Icon } from '../components/Icon'
 import { Segmented, Sheet, Switch } from '../components/ui'
-import { backupName, createBackup, markBackupDone, parseBackup, restoreBackup, saveFile, toCsv } from '../lib/backup'
-import { bookDueEntries } from '../lib/booking'
+import { BackupImport } from '../components/BackupImport'
+import { useBackupExport } from '../components/BackupExport'
+import { backupName, saveFile, toCsv } from '../lib/backup'
+import { formatTime } from '../lib/dates'
 import { expectSystemDialog } from '../lib/lockGuard'
 import { hasSampleData, loadSampleData, removeSampleData } from '../lib/sample'
 import { totals } from '../lib/subscriptions'
@@ -31,10 +33,6 @@ function DesignPage({ onBack }: { onBack: () => void }) {
   )
 }
 
-const daysAgo = (time: number) => {
-  const days = Math.floor((Date.now() - time) / 86_400_000)
-  return days === 0 ? 'Heute' : days === 1 ? 'Gestern' : `Vor ${days} Tagen`
-}
 
 export function SubPage({ title, onBack, children }: { title: string; onBack: () => void; children: React.ReactNode }) {
   return (
@@ -76,12 +74,12 @@ function ScanPage({ onBack }: { onBack: () => void }) {
       <h2 className="section-title">Fotos</h2>
       <div className="group">
         <div className="row">
-          <span className="row-main">Miniatur beim Eintrag speichern</span>
-          <Switch label="Miniatur speichern" checked={saveThumbnails} onChange={(value) => setMeta('saveThumbnails', value)} />
+          <span className="row-main">Gescannten Beleg als Foto anhängen</span>
+          <Switch label="Gescannten Beleg als Foto anhängen" checked={saveThumbnails} onChange={(value) => setMeta('saveThumbnails', value)} />
         </div>
       </div>
       <p className="section-foot">
-        Beim Scan wird das verkleinerte Foto an Anthropic geschickt. Das Originalfoto wird nicht in der App gespeichert.
+        Beim Scan wird das verkleinerte Foto an Anthropic geschickt. Ist der Schalter an, hängt die App das Foto verkleinert und verschlüsselt an den Eintrag.
         Ein Scan kostet etwa 0,05 bis 0,1 Cent.
       </p>
     </SubPage>
@@ -108,7 +106,7 @@ function GoalSheet({ onClose }: { onClose: () => void }) {
 }
 
 export function Settings() {
-  const { alert, toast, settingsPage, clearSettingsPage } = useApp()
+  const { alert, toast, settingsPage, clearSettingsPage, openReport } = useApp()
   const categories = useCategories()
   const groups = useGroups()
   const [sub, setSub] = useState<Sub>(settingsPage)
@@ -118,10 +116,15 @@ export function Settings() {
   const apiKey = useMeta('apiKey', '')
   const lastBackup = useMeta<number | null>('lastBackupAt', null)
   const preUpdate = useMeta<unknown>('preUpdateBackup', null)
+  const backupReminder = useMeta('backupReminder', true)
+  const backupDay = useMeta('backupDay', 1)
+  const parentsReminder = useMeta('parentsReminder', true)
+  const backup = useBackupExport()
   const theme = useTheme()
   const standing = useLiveQuery(() => db.recurring.filter((r) => !r.subscription).count(), [], 0)
   const subscriptions = useLiveQuery(() => db.recurring.filter((r) => !!r.subscription).toArray(), [], [])
   const sample = useLiveQuery(hasSampleData, [], false)
+  const [importing, setImporting] = useState<File | null>(null)
   const importer = useRef<HTMLInputElement>(null)
 
   useEffect(() => { requestPersistence().then(setPersisted) }, [])
@@ -141,34 +144,11 @@ export function Settings() {
 
   const fail = (error: unknown) => alert({ title: 'Das hat nicht geklappt', message: (error as Error).message, buttons: [{ label: 'OK', style: 'strong' }] })
 
-  const exportJson = () => createBackup()
-    .then((backup) => saveFile(backupName('json'), JSON.stringify(backup), 'application/json'))
-    .then(markBackupDone)
-    .catch(fail)
-
   const exportPreUpdate = () => saveFile(`budget-backup-vor-update.json`, JSON.stringify(preUpdate), 'application/json').catch(fail)
 
   const exportCsv = async () => {
     const entries = await db.entries.orderBy('date').toArray()
     await saveFile(backupName('csv'), toCsv(entries, categories, groups), 'text/csv').catch(fail)
-  }
-
-  const onImport = async (file: File | undefined) => {
-    if (!file) return
-    if (importer.current) importer.current.value = ''
-    try {
-      const backup = parseBackup(await file.text())
-      alert({
-        title: 'Backup einspielen?',
-        message: `${backup.entries.length} Einträge vom ${new Date(backup.exportedAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Alle aktuellen Einträge, Kategorien, Daueraufträge und Abos werden ersetzt.`,
-        buttons: [
-          { label: 'Ersetzen', style: 'destructive', onClick: () => restoreBackup(backup).then(() => bookDueEntries()).then(() => toast('Backup eingespielt')).catch(fail) },
-          { label: 'Abbrechen', style: 'strong' },
-        ],
-      })
-    } catch (error) {
-      fail(error)
-    }
   }
 
   const NavRow = ({ label, value, onClick }: { label: string; value?: string; onClick: () => void }) => (
@@ -198,21 +178,50 @@ export function Settings() {
         <NavRow label="Belegscan" value={apiKey ? 'Eingerichtet' : 'Nicht eingerichtet'} onClick={() => setSub('scan')} />
       </div>
 
+      <h2 className="section-title">Abrechnung</h2>
+      <div className="group">
+        <NavRow label="Monatsabrechnung als PDF" onClick={() => openReport()} />
+        <div className="row">
+          <span className="row-main">
+            Erinnerung Eltern-Abrechnung
+            <span className="row-sub" style={{ display: 'block' }}>Am Monatsende in der Übersicht</span>
+          </span>
+          <Switch label="Erinnerung Eltern-Abrechnung" checked={parentsReminder} onChange={(value) => setMeta('parentsReminder', value)} />
+        </div>
+      </div>
+
       <h2 className="section-title">Backup</h2>
       <div className="group">
-        <button className="row tint" onClick={exportJson}>
-          <span className="row-main">Backup exportieren</span>
-          <span className="row-value" style={{ fontSize: 15 }}>{lastBackup ? daysAgo(lastBackup) : 'Noch nie'}</span>
+        <button className="row tint" disabled={backup.busy} onClick={backup.run}>
+          <span className="row-main">{backup.busy ? 'Backup wird erstellt …' : 'Backup exportieren'}</span>
         </button>
+        <div className="row">
+          <span className="row-main">Letztes Backup</span>
+          <span className="row-value">{lastBackup ? formatTime(lastBackup) : 'Noch nie'}</span>
+        </div>
+        <div className="row">
+          <span className="row-main">Monatliche Erinnerung</span>
+          <Switch label="Monatliche Backup-Erinnerung" checked={backupReminder} onChange={(value) => setMeta('backupReminder', value)} />
+        </div>
+        {backupReminder && (
+          <label className="row">
+            <span className="row-main">Erinnerungstag</span>
+            <select aria-label="Erinnerungstag" value={backupDay} onChange={(e) => setMeta('backupDay', Number(e.target.value))}>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => <option key={day} value={day}>{day}. des Monats</option>)}
+            </select>
+          </label>
+        )}
         <button className="row tint" onClick={() => { expectSystemDialog(); importer.current?.click() }}>Backup importieren</button>
         <button className="row tint" onClick={exportCsv}>Als CSV exportieren (Excel, Numbers)</button>
         {!!preUpdate && <button className="row tint" onClick={exportPreUpdate}>Sicherung von vor dem Update exportieren</button>}
       </div>
       <p className="section-foot">
-        Deine Daten liegen nur auf diesem iPhone. Das Backup ist der einzige Weg zurück, falls du deinen App-Code vergisst oder das Handy wechselst. Speichere es regelmäßig in iCloud Drive.
-        Das Backup selbst ist nicht verschlüsselt. API-Schlüssel und App-Code sind nicht enthalten.
+        Deine Daten liegen nur auf diesem iPhone. Das Backup enthält alle Einträge und Belegfotos und ist mit deinem App-Code verschlüsselt.
+        Zum Einspielen brauchst du den App-Code, der beim Erstellen galt. API-Schlüssel und App-Code selbst stehen nicht darin.
+        Speichere es in iCloud Drive. Die CSV-Datei ist nicht verschlüsselt und enthält keine Fotos.
       </p>
-      <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(e) => onImport(e.target.files?.[0])} />
+      <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(e) => { setImporting(e.target.files?.[0] ?? null); e.target.value = '' }} />
+      {importing && <BackupImport file={importing} onClose={() => setImporting(null)} />}
 
       <h2 className="section-title">Beispieldaten</h2>
       <div className="group">

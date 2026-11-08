@@ -39,6 +39,8 @@ export interface Entry {
   merchant?: string
   /** Small receipt photo as data URL */
   thumbnail?: string
+  /** Ids of the attached receipt photos, stored encrypted by lib/vault */
+  photos?: string[]
   recurringId?: string
   /** `${recurringId}:${date}`, unique, so a booking cannot exist twice */
   recurringKey?: string
@@ -146,7 +148,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
     ['drogerie', 'Drogerie', '🧴', 'spray-can', BLUE, 'grp-essen'],
     ['shopping', 'Shopping & Kleidung', '🛍️', 'shirt', ORANGE, 'grp-freizeit'],
     ['sport', 'Sport', '🏃', 'dumbbell', ORANGE, 'grp-freizeit'],
-    ['freizeit', 'Kino & Freizeit', '🎬', 'clapperboard', ORANGE, 'grp-freizeit'],
+    ['freizeit', 'Freizeit', '🎬', 'clapperboard', ORANGE, 'grp-freizeit'],
     ['vacation', 'Vacation', '✈️', 'plane', ORANGE, 'grp-freizeit'],
     ['geschenke', 'Geschenke', '🎁', 'gift', ORANGE, 'grp-freizeit'],
     ['studium', 'Studium', '🎓', 'graduation-cap', GREEN, 'grp-studium'],

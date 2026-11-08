@@ -1,13 +1,17 @@
 import { useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { Paperclip } from 'lucide-react'
 import { db, getMeta, newId, PARENTS_EXPENSE, type Category, type Entry, type EntryType } from '../db'
 import { useApp, useCategories } from '../context'
 import { formatDate, today } from '../lib/dates'
 import { amountToInput, parseAmount } from '../lib/format'
 import { haptic } from '../lib/haptics'
 import { expectSystemDialog } from '../lib/lockGuard'
+import { compressPhoto } from '../lib/photos'
 import { prepareImage, scanReceipt, ScanError, type ScanResult } from '../lib/scan'
+import { deletePhotos, savePhotos, whenSaved } from '../lib/vault'
 import { Icon } from './Icon'
+import { PhotoThumb, PhotoViewer, type PhotoSource } from './PhotoViewer'
 import { AmountDisplay, Keypad } from './Keypad'
 import { Segmented, Sheet, Switch } from './ui'
 import { CategoryIcon } from './CategoryIcon'
@@ -30,7 +34,84 @@ function useSortedCategories(type: EntryType): Category[] {
   }, [categories, recent, type])
 }
 
-export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => void }) {
+/** Receipt photos of the entry: add from camera or library, view, replace, delete. */
+function PhotoRow({ photos, onChange, busy }: { photos: PhotoSource[]; onChange: (photos: PhotoSource[]) => void; busy: boolean }) {
+  const { alert } = useApp()
+  const [viewing, setViewing] = useState<number | null>(null)
+  const [adding, setAdding] = useState(false)
+  const replacing = useRef<number | null>(null)
+  const camera = useRef<HTMLInputElement>(null)
+  const library = useRef<HTMLInputElement>(null)
+
+  const choose = (replace: number | null) => {
+    replacing.current = replace
+    alert({
+      title: replace === null ? 'Beleg anhängen' : 'Foto ersetzen',
+      buttons: [
+        { label: 'Foto aufnehmen', onClick: () => { expectSystemDialog(); camera.current?.click() } },
+        { label: 'Aus Mediathek wählen', onClick: () => { expectSystemDialog(); library.current?.click() } },
+        { label: 'Abbrechen', style: 'strong' },
+      ],
+    })
+  }
+
+  const onFiles = async (files: FileList | null) => {
+    const list = [...(files ?? [])]
+    if (camera.current) camera.current.value = ''
+    if (library.current) library.current.value = ''
+    if (list.length === 0) return
+    setAdding(true)
+    try {
+      const added: PhotoSource[] = []
+      for (const file of list) added.push({ id: newId(), blob: await compressPhoto(file) })
+      const at = replacing.current
+      onChange(at === null ? [...photos, ...added] : photos.map((p, i) => (i === at ? added[0] : p)))
+    } catch {
+      alert({ title: 'Foto nicht lesbar', message: 'Bitte versuche ein anderes Foto.', buttons: [{ label: 'OK', style: 'strong' }] })
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const remove = (index: number) => alert({
+    title: 'Foto löschen?',
+    message: 'Das Foto wird beim Sichern des Eintrags entfernt.',
+    buttons: [
+      { label: 'Löschen', style: 'destructive', onClick: () => onChange(photos.filter((_, i) => i !== index)) },
+      { label: 'Abbrechen', style: 'strong' },
+    ],
+  })
+
+  return (
+    <>
+      {photos.length > 0 && (
+        <div className="photo-strip" role="group" aria-label="Belegfotos">
+          {photos.map((p, i) => (
+            <button key={p.id} className="photo-pick" aria-label={`Belegfoto ${i + 1} ansehen`} onClick={() => setViewing(i)}>
+              <PhotoThumb source={p} />
+            </button>
+          ))}
+        </div>
+      )}
+      <button className="field grow center scan-btn" disabled={busy || adding} onClick={() => choose(null)}>
+        <Paperclip size={19} strokeWidth={1.9} aria-hidden="true" /> {adding ? 'Wird verkleinert …' : photos.length > 0 ? 'Weiteres Foto' : 'Foto anhängen'}
+      </button>
+      {viewing !== null && (
+        <PhotoViewer
+          photos={photos}
+          start={viewing}
+          onClose={() => setViewing(null)}
+          onReplace={(i) => { setViewing(null); choose(i) }}
+          onDelete={(i) => { setViewing(null); remove(i) }}
+        />
+      )}
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => onFiles(e.target.files)} />
+      <input ref={library} type="file" accept="image/*" multiple hidden onChange={(e) => onFiles(e.target.files)} />
+    </>
+  )
+}
+
+export function EntrySheet({ entry, onClose, onSaved }: { entry?: Entry; onClose: () => void; onSaved?: (entry: Entry, before?: Entry) => void }) {
   const { toast, alert } = useApp()
   const [type, setType] = useState<EntryType>(entry?.type ?? 'expense')
   const [amount, setAmount] = useState(entry ? amountToInput(entry.amount) : '')
@@ -38,8 +119,10 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
   const [date, setDate] = useState(entry?.date ?? today())
   const [note, setNote] = useState(entry?.note ?? '')
   const [merchant, setMerchant] = useState(entry?.merchant ?? '')
-  const [thumbnail, setThumbnail] = useState(entry?.thumbnail)
+  const thumbnail = entry?.thumbnail
   const [refunded, setRefunded] = useState(entry?.refunded ?? false)
+  const [photos, setPhotos] = useState<PhotoSource[]>(() => (entry?.photos ?? []).map((id) => ({ id })))
+  const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanned, setScanned] = useState(false)
   const camera = useRef<HTMLInputElement>(null)
@@ -55,7 +138,8 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
   }
 
   const save = async () => {
-    if (!valid) return
+    if (!valid || saving) return
+    setSaving(true)
     const values = {
       type,
       amount: cents,
@@ -65,12 +149,24 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
       merchant: merchant.trim() || undefined,
       thumbnail,
       refunded: categoryId === PARENTS_EXPENSE && refunded ? true : undefined,
+      photos: photos.length > 0 ? photos.map((p) => p.id) : undefined,
     }
-    if (entry) await db.entries.update(entry.id, values)
-    else await db.entries.add({ ...values, id: newId(), createdAt: Date.now() })
-    haptic()
-    toast(entry ? 'Änderung gespeichert' : 'Eintrag gespeichert')
-    onClose()
+    try {
+      // Photos first, so the entry never points to a photo that is not stored
+      await savePhotos(photos.filter((p) => p.blob).map((p) => ({ id: p.id, data: p.blob! })))
+      const saved: Entry = entry ? { ...entry, ...values } : { ...values, id: newId(), createdAt: Date.now() }
+      await db.entries.put(saved)
+      const removed = (entry?.photos ?? []).filter((id) => !photos.some((p) => p.id === id))
+      if (removed.length > 0) whenSaved().then(() => deletePhotos(removed)).catch((error) => console.error(error))
+      haptic()
+      toast(entry ? 'Änderung gespeichert' : 'Eintrag gespeichert')
+      onClose()
+      onSaved?.(saved, entry)
+    } catch (error) {
+      console.error(error)
+      setSaving(false)
+      alert({ title: 'Speichern fehlgeschlagen', message: 'Ist der Speicher des iPhones voll? Bitte versuche es noch einmal.', buttons: [{ label: 'OK', style: 'strong' }] })
+    }
   }
 
   const applyScan = (result: ScanResult) => {
@@ -105,10 +201,12 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
     if (!file) return
     setScanning(true)
     try {
-      const { base64, thumbnail: small } = await prepareImage(file)
+      const { base64 } = await prepareImage(file)
+      // The scanned receipt is kept as a photo of the entry, removable before saving
+      const kept = (await getMeta('saveThumbnails', true)) ? await compressPhoto(file).catch(() => null) : null
+      if (kept) setPhotos((list) => [...list, { id: newId(), blob: kept }])
       const result = await scanReceipt(base64, await getMeta('apiKey', ''), categories)
       applyScan(result)
-      if (await getMeta('saveThumbnails', true)) setThumbnail(small)
     } catch (error) {
       alert({
         title: 'Scan nicht möglich',
@@ -143,7 +241,6 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
 
       {(scanning || scanned) && (
         <div className="preview" role="status">
-          {thumbnail && <img src={thumbnail} alt="" />}
           <span>{scanning ? 'Beleg wird gelesen …' : 'Vorausgefüllt. Bitte prüfen und sichern.'}</span>
         </div>
       )}
@@ -176,13 +273,14 @@ export function EntrySheet({ entry, onClose }: { entry?: Entry; onClose: () => v
         </div>
       )}
 
-      {type === 'expense' && (
-        <div className="form-row">
+      <div className="form-row photo-row">
+        {type === 'expense' && (
           <button className="field grow center scan-btn" disabled={scanning} onClick={chooseSource}>
             <Icon name="camera" size={20} /> Beleg scannen
           </button>
-        </div>
-      )}
+        )}
+        <PhotoRow photos={photos} onChange={setPhotos} busy={scanning} />
+      </div>
 
       <Keypad onChange={setAmount} />
 

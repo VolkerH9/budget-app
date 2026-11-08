@@ -589,7 +589,8 @@ button.row:active,
     background: #1c1c1e;
   }
   .sheet .group,
-  .sheet .row {
+  .sheet .row,
+  .sheet .card {
     background: #2c2c2e;
   }
 }
@@ -1022,6 +1023,187 @@ button.row:active,
   height: 40px;
   border-radius: 7px;
   object-fit: cover;
+}
+
+/* Receipt photos */
+
+.photo-row {
+  flex-wrap: wrap;
+}
+
+.photo-strip {
+  flex: 0 0 100%;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.photo-pick {
+  flex: none;
+  border-radius: 10px;
+}
+
+.photo-thumb {
+  display: block;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  background: var(--fill);
+  object-fit: cover;
+}
+
+.entry-row:has(.row-link:active) {
+  background: var(--fill);
+}
+
+.row-link {
+  display: block;
+  max-width: 100%;
+  text-align: left;
+}
+
+/* The row's name stretches over the whole row, so a tap anywhere opens the entry */
+.row-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.clip-btn {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 36px;
+  min-height: 36px;
+  justify-content: center;
+  margin: -4px -6px -4px 0;
+  border-radius: 10px;
+  color: var(--tint);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clip-btn:active {
+  background: var(--tint-soft);
+}
+
+.viewer {
+  position: absolute;
+  z-index: 55;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  color: #fff;
+  animation: fade 0.2s;
+}
+
+.viewer-head,
+.viewer-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+}
+
+.viewer-head {
+  padding-top: calc(var(--safe-top) + 6px);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 15px;
+}
+
+.viewer-head button {
+  min-height: 44px;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.viewer-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.viewer-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.viewer-stage img.animate {
+  transition: transform 0.25s ease;
+}
+
+.viewer-missing {
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-top: -20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.viewer-nav.prev {
+  left: 10px;
+}
+
+.viewer-nav.next {
+  right: 10px;
+}
+
+.viewer-foot {
+  min-height: 52px;
+  padding-bottom: calc(var(--safe-bottom) + 8px);
+}
+
+.viewer-caption {
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.viewer-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.viewer-actions button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 600;
+}
+
+.viewer-actions button.danger {
+  color: #ff8a80;
 }
 
 .keypad {
@@ -2255,4 +2437,72 @@ button.cmp-row:active {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Parents repayment and PDF report */
+
+.sheet-question {
+  margin: 4px 4px 12px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.refund-diff {
+  color: var(--orange, var(--label2));
+  font-weight: 600;
+}
+
+.refund-diff.ok {
+  color: var(--green);
+}
+
+.report-preview {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.report-lines {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 15px;
+}
+
+.report-lines dt {
+  color: var(--label2);
+}
+
+.report-lines dd {
+  margin: 0;
+  text-align: right;
+}
+
+.report-open {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tint-soft);
+  color: var(--tint);
+  font-weight: 600;
+}
+
+.report-open strong {
+  font-family: var(--num-font);
+  font-size: 24px;
+}
+
+.report-count {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.secondary-btn.wide {
+  width: 100%;
+  padding: 10px 16px;
+  line-height: 1.3;
 }

@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { Check } from 'lucide-react'
-import { db, setMeta, type Entry } from '../db'
+import { db, PARENTS_EXPENSE, setMeta, type Entry } from '../db'
+import { useApp } from '../context'
 import { formatDate } from '../lib/dates'
 import { formatEuro } from '../lib/format'
 import { haptic } from '../lib/haptics'
+import { openItems, refundDifference, suggestRefund } from '../lib/parents'
 import { parentsBalance } from '../lib/stats'
 import { Sheet, Switch } from './ui'
 
@@ -33,6 +36,67 @@ function RefundRow({ entry }: { entry: Entry }) {
       </span>
       <span className="row-value num">{formatEuro(entry.amount)}</span>
     </button>
+  )
+}
+
+/** After a repayment: which open expenses it covers. Suggests a fitting selection, the user can change it. */
+export function RefundSheet({ refund, onClose }: { refund: Entry; onClose: () => void }) {
+  const { toast } = useApp()
+  const open = useLiveQuery(() => db.entries.where('categoryId').equals(PARENTS_EXPENSE).toArray().then(openItems), [])
+  const [selected, setSelected] = useState<Set<string> | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    if (open.length === 0) onClose()
+    else if (selected === null) setSelected(new Set(suggestRefund(open, refund.amount)))
+  }, [open, selected, refund.amount, onClose])
+
+  if (!open || open.length === 0 || selected === null) return null
+  const total = open.filter((e) => selected.has(e.id)).reduce((sum, e) => sum + e.amount, 0)
+  const exact = total === refund.amount
+
+  const toggle = (id: string) => {
+    haptic()
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelected(next)
+  }
+
+  const confirm = async () => {
+    await db.entries.bulkUpdate([...selected].map((key) => ({ key, changes: { refunded: true } })))
+    haptic()
+    toast(selected.size === 1 ? '1 Posten als erstattet markiert' : `${selected.size} Posten als erstattet markiert`)
+    onClose()
+  }
+
+  return (
+    <Sheet title="Eltern-Posten" onClose={onClose} full action={{ label: 'Markieren', onClick: confirm, disabled: selected.size === 0 }}>
+      <h3 className="sheet-question">Offene Eltern-Posten als erstattet markieren?</h3>
+      <div className="card stat-card">
+        <span className="row-sub">Rückzahlung</span>
+        <strong className="mid-num num">{formatEuro(refund.amount)}</strong>
+        <div className="mini-stats num">
+          <span>Ausgewählt {formatEuro(total)}</span>
+          <span className={exact ? 'refund-diff ok' : 'refund-diff'}>{refundDifference(refund.amount, total, formatEuro)}</span>
+        </div>
+      </div>
+      <p className="section-foot">Vorgeschlagen sind die ältesten Posten, die zusammen zur Rückzahlung passen. Tippe einen Posten an, um ihn dazuzunehmen oder herauszunehmen.</p>
+      <h3 className="section-title">Noch nicht erstattet, älteste zuerst</h3>
+      <div className="group">
+        {open.map((e) => (
+          <button key={e.id} className="row" role="checkbox" aria-checked={selected.has(e.id)} onClick={() => toggle(e.id)}>
+            <span className={selected.has(e.id) ? 'check on' : 'check'} aria-hidden="true">{selected.has(e.id) && <Check size={16} strokeWidth={3} />}</span>
+            <span className="row-main">
+              <span className="row-title" style={{ display: 'block' }}>{e.note || e.merchant || 'Eltern'}</span>
+              <span className="row-sub" style={{ display: 'block' }}>{formatDate(e.date)}</span>
+            </span>
+            <span className="row-value num">{formatEuro(e.amount)}</span>
+          </button>
+        ))}
+      </div>
+      <div style={{ height: 24 }} />
+    </Sheet>
   )
 }
 

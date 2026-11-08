@@ -16,7 +16,7 @@ export interface ScanResult {
 
 export class ScanError extends Error {}
 
-function loadImage(file: Blob): Promise<HTMLImageElement> {
+export function loadImage(file: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const image = new Image()

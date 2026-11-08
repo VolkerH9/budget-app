@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { FileText } from 'lucide-react'
 import { db, type EntryType } from '../db'
-import { useCategories, useGroups, useMeta, useRangeEntries } from '../context'
+import { useApp, useCategories, useGroups, useMeta, useRangeEntries } from '../context'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { Icon } from '../components/Icon'
 import { HideParentsRow } from '../components/ParentsCard'
@@ -241,12 +242,19 @@ function MonthView({ hide }: { hide: boolean }) {
 export function Analysis() {
   const [mode, setMode] = useSticky<'year' | 'month'>('analysis-mode', 'year')
   const hide = useMeta('hideParents', false)
+  const { openReport } = useApp()
   return (
     <main className="page">
       <h1 className="page-title">Auswertung</h1>
       <Segmented value={mode} options={[['year', 'Jahr'], ['month', 'Monat']]} onChange={setMode} />
       <div className="group" style={{ margin: '10px 0 12px' }}><HideParentsRow hide={hide} /></div>
       {mode === 'year' ? <YearView hide={hide} /> : <MonthView hide={hide} />}
+      <div className="group" style={{ marginTop: 20 }}>
+        <button className="row tint" onClick={() => openReport()}>
+          <FileText size={20} strokeWidth={1.8} aria-hidden="true" />
+          <span className="row-main">Monatsabrechnung als PDF</span>
+        </button>
+      </div>
     </main>
   )
 }

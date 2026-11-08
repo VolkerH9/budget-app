@@ -27,10 +27,23 @@ Beim ersten Start legst du einen App-Code fest (mindestens 6 Zeichen). Alle Date
 - **Sperren im Hintergrund**: standardmäßig nie, sonst sofort, nach 1, 5 oder 15 Minuten.
 - **App-Code vergessen**: Solange Face ID funktioniert, legst du einfach einen neuen fest. Sonst kann niemand die Daten entschlüsseln, und es bleibt nur „App-Code vergessen?“ auf dem Sperrbildschirm: Die App wird zurückgesetzt und du spielst dein letztes Backup ein.
 
+## Belegfotos
+
+Bei jeder Buchung (neu oder beim Bearbeiten) tippst du auf **Foto anhängen** und nimmst ein Foto auf oder wählst eins oder mehrere aus der Mediathek. Das klappt ohne Internet und ohne KI. Die App verkleinert jedes Foto auf höchstens 1800 Pixel (meist 100 bis 450 KB) und speichert es verschlüsselt. In der Liste zeigt eine Büroklammer Buchungen mit Beleg. Antippen öffnet das Foto groß, zum Vergrößern zwei Finger spreizen oder doppelt tippen. Im Buchungsformular tippst du ein Foto an, um es zu ersetzen oder zu löschen. Ein gescannter Beleg wird ebenfalls als Foto angehängt (abschaltbar unter Einstellungen › Belegscan).
+
+## Monatsabrechnung als PDF
+
+**Einstellungen › Monatsabrechnung als PDF** oder unten in der **Auswertung**. Monat wählen, dann eine von zwei Varianten:
+
+- **Eltern-Abrechnung**: alle Buchungen in „Eltern“ im Monat mit Status offen oder erstattet, die Rückzahlungen im Monat, der Übertrag aus den Vormonaten und der offene Betrag. Im Anhang alle Belegfotos, nummeriert wie in der Tabelle. „Alle Posten dieser Abrechnung als erstattet markieren“ hakt den Monat ab und bucht auf Wunsch den offenen Betrag als Rückzahlung.
+- **Monatsbericht**: alle Buchungen nach Über- und Unterkategorie mit Summen, Einnahmen, Ausgaben, Sparen, Rest und Sparquote, auf Wunsch mit Belegfotos.
+
+Das PDF entsteht auf dem iPhone und geht über das Teilen-Menü an WhatsApp, Mail oder Dateien. Am Monatsende fragt die Übersicht nach der Eltern-Abrechnung (abschaltbar unter Einstellungen › Abrechnung).
+
 ## Überkategorien, Eltern-Kosten und Auswertung
 
 - **Überkategorien**: Einstellungen › Kategorien. Überkategorien anlegen, umbenennen, löschen; eine Kategorie verschiebst du, indem du sie antippst und eine andere Überkategorie wählst.
-- **Eltern-Kosten**: Ausgaben für deine Eltern buchst du in „Eltern“, ihre Rückzahlungen in „Kostenrückzahlung Eltern“. „Offen von Eltern“ ist die Differenz. Einzelne Ausgaben hakst du in der Übersicht als erstattet ab. „Eltern-Kosten ausblenden“ nimmt beide Kategorien aus allen Summen.
+- **Eltern-Kosten**: Ausgaben für deine Eltern buchst du in „Eltern“, ihre Rückzahlungen in „Kostenrückzahlung Eltern“. „Offen von Eltern“ ist die Differenz. Nach einer neuen Rückzahlung schlägt die App die offenen Posten vor, die zusammen genau dem Betrag entsprechen (die ältesten zuerst), und zeigt, was offen bleibt oder zu viel kam. Einzelne Ausgaben hakst du auch in der Übersicht ab. „Eltern-Kosten ausblenden“ nimmt beide Kategorien aus allen Summen.
 - **Auswertung**: Jahr gegen Vergleichsjahr oder zwei beliebige Monate nebeneinander.
 
 ## Abos
@@ -47,7 +60,16 @@ Beim ersten Start legst du einen App-Code fest (mindestens 6 Zeichen). Alle Date
 
 ## Backup
 
-**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup ist der einzige Weg zurück, wenn du das Handy wechselst oder Face ID und den App-Code verlierst. Die Datei selbst ist nicht verschlüsselt. API-Schlüssel und App-Code sind bewusst nicht enthalten. Backups der ersten App-Version lassen sich weiterhin einspielen und werden dabei umgestellt.
+**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Am eingestellten Tag jedes Monats (Standard: der 1.) erinnert die Übersicht an das Backup, ein Tipp startet es. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
+
+**Auf einem neuen iPhone wiederherstellen**
+
+1. Budget in Safari öffnen und zum Home-Bildschirm hinzufügen.
+2. Die App starten und einen App-Code festlegen (gern derselbe wie vorher).
+3. **Einstellungen › Backup importieren**, die Datei in iCloud Drive wählen.
+4. Den App-Code eingeben, der beim Erstellen des Backups galt, und „Ersetzen“ tippen.
+
+Ohne diesen Code lässt sich das Backup nicht öffnen. Hast du den Code später geändert, brauchst du für ältere Backups den alten. Backups der früheren Versionen (ohne Verschlüsselung) lassen sich weiterhin einspielen. Die CSV-Datei für Excel ist nicht verschlüsselt und enthält keine Fotos.
 
 ## Für die Entwicklung
 
