@@ -35,15 +35,15 @@ Bei jeder Buchung (neu oder beim Bearbeiten) tippst du auf **Foto anhängen** un
 
 **Einstellungen › Monatsabrechnung als PDF** oder unten in der **Auswertung**. Monat wählen, dann eine von zwei Varianten:
 
-- **Eltern-Abrechnung**: alle Buchungen in „Eltern“ im Monat mit Status offen oder erstattet, die Rückzahlungen im Monat, der Übertrag aus den Vormonaten und der offene Betrag. Im Anhang alle Belegfotos, nummeriert wie in der Tabelle. „Alle Posten dieser Abrechnung als erstattet markieren“ hakt den Monat ab und bucht auf Wunsch den offenen Betrag als Rückzahlung.
+- **Eltern-Abrechnung**: alle Buchungen in „Eltern“ im Monat mit Status offen oder erstattet, was schon bezahlt ist (mit jeder Zahlung) und der offene Betrag. Im Anhang alle Belegfotos, nummeriert wie in der Tabelle. Unter „Zahlung deiner Eltern“ buchst du eine Zahlung für genau diese Abrechnung, für eine Teilzahlung änderst du den Betrag.
 - **Monatsbericht**: alle Buchungen nach Über- und Unterkategorie mit Summen, Einnahmen, Ausgaben, Sparen, Rest und Sparquote, auf Wunsch mit Belegfotos.
 
-Das PDF entsteht auf dem iPhone und geht über das Teilen-Menü an WhatsApp, Mail oder Dateien. Am Monatsende fragt die Übersicht nach der Eltern-Abrechnung (abschaltbar unter Einstellungen › Abrechnung).
+Das PDF entsteht auf dem iPhone und geht über das Teilen-Menü an WhatsApp, Mail oder Dateien. Am Monatsende zeigt die Übersicht die fertige Eltern-Abrechnung zum Teilen (abschaltbar unter Einstellungen › Abrechnung).
 
 ## Überkategorien, Eltern-Kosten und Auswertung
 
 - **Überkategorien**: Einstellungen › Kategorien. Überkategorien anlegen, umbenennen, löschen; eine Kategorie verschiebst du, indem du sie antippst und eine andere Überkategorie wählst.
-- **Eltern-Kosten**: Ausgaben für deine Eltern buchst du in „Eltern“, ihre Rückzahlungen in „Kostenrückzahlung Eltern“. „Offen von Eltern“ ist die Differenz. Nach einer neuen Rückzahlung schlägt die App die offenen Posten vor, die zusammen genau dem Betrag entsprechen (die ältesten zuerst), und zeigt, was offen bleibt oder zu viel kam. Einzelne Ausgaben hakst du auch in der Übersicht ab. „Eltern-Kosten ausblenden“ nimmt beide Kategorien aus allen Summen.
+- **Eltern-Kosten**: Ausgaben für deine Eltern buchst du in „Eltern“, ihre Rückzahlungen in „Kostenrückzahlung Eltern“. „Offen von Eltern“ ist die Differenz. Jeder Monat mit Eltern-Ausgaben hat automatisch eine eigene Abrechnung (Übersicht › Offen von Eltern › Abrechnungen) mit Status offen, teilweise bezahlt oder bezahlt. Nach einer neuen Rückzahlung fragt die App, für welche Abrechnung sie ist, und schlägt die älteste offene vor. Eine Zahlung ohne Zuordnung bezahlt die älteste offene Abrechnung, ein Überschuss die nächste. Ist eine Abrechnung ganz bezahlt, gelten ihre Posten als erstattet; einzelne Ausgaben hakst du zusätzlich von Hand ab. „Eltern-Kosten ausblenden“ nimmt beide Kategorien aus allen Summen.
 - **Auswertung**: Jahr gegen Vergleichsjahr oder zwei beliebige Monate nebeneinander.
 
 ## Abos

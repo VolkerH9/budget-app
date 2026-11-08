@@ -1,83 +1,101 @@
 import { PARENTS_EXPENSE, PARENTS_REFUND, type Entry } from '../db'
-import { monthRange } from './dates'
+import { monthOf } from './dates'
 
 const isExpense = (e: Entry) => e.categoryId === PARENTS_EXPENSE && e.type === 'expense'
 const isRefund = (e: Entry) => e.categoryId === PARENTS_REFUND && e.type === 'income'
-const sum = (entries: Entry[]) => entries.reduce((total, e) => total + e.amount, 0)
+const byDate = (a: Entry, b: Entry) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt
 
-/** Parents expenses not ticked off yet, oldest first */
-export const openItems = (entries: Entry[]) =>
-  entries.filter((e) => isExpense(e) && !e.refunded).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt)
+export type StatementStatus = 'open' | 'partial' | 'paid'
 
-/** Above this the exact search would need too much memory; then the oldest items are taken in order */
-const EXACT_LIMIT = 200_000
+/** The part of a repayment that went to one statement */
+export interface Payment {
+  refund: Entry
+  amount: number
+}
 
 /**
- * The open items a repayment most likely covers. Items that add up exactly
- * to the amount win, and among those the oldest ones. Without an exact match
- * the oldest items are taken as long as they fit into the amount.
+ * The parents statement of one month. It exists by itself as soon as the month
+ * has a parents expense; nothing is stored apart from the entries.
  */
-export function suggestRefund(open: Entry[], amount: number): string[] {
-  const items = [...open].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt)
-  if (amount > 0 && amount <= EXACT_LIMIT && items.length <= 60) {
-    // reach[i][s]: the items from i on can add up to exactly s
-    const reach = Array.from({ length: items.length + 1 }, () => new Uint8Array(amount + 1))
-    reach[items.length][0] = 1
-    for (let i = items.length - 1; i >= 0; i--) {
-      const a = items[i].amount
-      const next = reach[i + 1]
-      const row = reach[i]
-      for (let s = 0; s <= amount; s++) row[s] = next[s] || (s >= a && next[s - a]) ? 1 : 0
-    }
-    if (reach[0][amount]) {
-      // Going from the oldest item, take each one that still allows an exact total
-      const chosen: string[] = []
-      let rest = amount
-      for (let i = 0; i < items.length && rest > 0; i++) {
-        if (items[i].amount <= rest && reach[i + 1][rest - items[i].amount]) {
-          chosen.push(items[i].id)
-          rest -= items[i].amount
-        }
-      }
-      return chosen
-    }
-  }
-  const chosen: string[] = []
-  let rest = amount
-  for (const item of items) {
-    if (item.amount > rest) break
-    chosen.push(item.id)
-    rest -= item.amount
-  }
-  return chosen
-}
-
-/** Text for the difference between a repayment and the ticked items */
-export function refundDifference(amount: number, selected: number, euro: (cents: number) => string): string {
-  if (selected === amount) return 'Passt genau'
-  return selected > amount ? `${euro(selected - amount)} bleiben offen` : `${euro(amount - selected)} zu viel erhalten`
-}
-
-export interface ParentsStatement {
+export interface Statement {
   month: string
   /** Parents expenses of the month, oldest first */
   items: Entry[]
-  spent: number
-  /** Repayments booked in the month */
-  refunds: number
-  /** Still open from the months before */
-  carry: number
-  /** What the parents owe at the end of the month: carry + spent − refunds */
+  total: number
+  paid: number
   open: number
+  status: StatementStatus
+  payments: Payment[]
+  /** The month is not over yet, more expenses may come */
+  running: boolean
 }
 
-export function parentsStatement(entries: Entry[], month: string): ParentsStatement {
-  const [from, to] = monthRange(month)
-  const before = entries.filter((e) => e.date < from)
-  const inside = entries.filter((e) => e.date >= from && e.date <= to)
-  const items = inside.filter(isExpense).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt)
-  const spent = sum(items)
-  const refunds = sum(inside.filter(isRefund))
-  const carry = sum(before.filter(isExpense)) - sum(before.filter(isRefund))
-  return { month, items, spent, refunds, carry, open: carry + spent - refunds }
+export interface StatementBook {
+  /** Oldest first */
+  statements: Statement[]
+  /** Paid beyond all statements */
+  credit: number
+}
+
+/**
+ * Splits all repayments over the monthly statements. A repayment assigned to a
+ * month (`forMonth`) goes there first; anything else, and what is left over,
+ * pays the oldest open statement first. So a statement can be paid in parts.
+ */
+export function statements(entries: Entry[], now: string): StatementBook {
+  const items = entries.filter(isExpense).sort(byDate)
+  const months = [...new Set(items.map((e) => monthOf(e.date)))].sort()
+  const list: Statement[] = months.map((month) => {
+    const own = items.filter((e) => monthOf(e.date) === month)
+    const total = own.reduce((sum, e) => sum + e.amount, 0)
+    return { month, items: own, total, paid: 0, open: total, status: 'open', payments: [], running: month >= monthOf(now) }
+  })
+  const find = (month: string | undefined) => list.find((s) => s.month === month)
+  const pay = (s: Statement, refund: Entry, amount: number) => {
+    s.paid += amount
+    s.open -= amount
+    const known = s.payments.find((p) => p.refund.id === refund.id)
+    if (known) known.amount += amount
+    else s.payments.push({ refund, amount })
+  }
+
+  const refunds = entries.filter(isRefund).sort(byDate)
+  const rest = new Map<string, number>()
+  for (const r of refunds) {
+    const target = find(r.forMonth)
+    const amount = target ? Math.min(r.amount, target.open) : 0
+    if (amount > 0) pay(target!, r, amount)
+    rest.set(r.id, r.amount - amount)
+  }
+  let credit = 0
+  for (const r of refunds) {
+    let left = rest.get(r.id)!
+    for (const s of list) {
+      if (left === 0) break
+      const amount = Math.min(left, s.open)
+      if (amount > 0) {
+        pay(s, r, amount)
+        left -= amount
+      }
+    }
+    credit += left
+  }
+  for (const s of list) s.status = s.open === 0 ? 'paid' : s.paid > 0 ? 'partial' : 'open'
+  return { statements: list, credit }
+}
+
+export const STATUS_LABEL: Record<StatementStatus, string> = { open: 'offen', partial: 'teilweise bezahlt', paid: 'bezahlt' }
+
+/** Ids of parents expenses that count as refunded: ticked by hand, or their statement is paid */
+export function settledItems(book: StatementBook): Set<string> {
+  const ids = new Set<string>()
+  for (const s of book.statements) for (const e of s.items) if (e.refunded || s.status === 'paid') ids.add(e.id)
+  return ids
+}
+
+/** What a repayment does to a statement, for the sheet that assigns it */
+export function paymentEffect(open: number, amount: number, euro: (cents: number) => string): string {
+  if (amount < open) return `Danach noch ${euro(open - amount)} offen`
+  if (amount === open) return 'Danach ganz bezahlt'
+  return `Ganz bezahlt, ${euro(amount - open)} gehen an die nächste offene Abrechnung`
 }

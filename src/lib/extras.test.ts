@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db, newId, PARENTS_EXPENSE, PARENTS_REFUND, setMeta, type Entry } from '../db'
 import { createBackup, createBackupFile, openBackupFile, parseBackup, readSealed, restoreBackup } from './backup'
 import { migrateData, renameLeisure } from './migrate'
-import { openItems, parentsStatement, refundDifference, suggestRefund } from './parents'
+import { paymentEffect, settledItems, statements } from './parents'
 import { monthReport, parentsReport, pdfText } from './pdf'
 import { backupState, parentsReportDue, reportMonth } from './reminders'
 import { changeCode, closeSession, deletePhotos, loadPhoto, prepareSetup, prunePhotos, resetDevice, savePhotos, setupVault, store, unlockWithCode, whenSaved } from './vault'
@@ -102,45 +102,52 @@ describe('Belegfotos', () => {
   })
 })
 
-describe('Eltern-Posten abhaken', () => {
-  const items = [
-    entry({ id: 'a', categoryId: PARENTS_EXPENSE, amount: 1250, date: '2026-10-01' }),
-    entry({ id: 'b', categoryId: PARENTS_EXPENSE, amount: 2000, date: '2026-10-05' }),
-    entry({ id: 'c', categoryId: PARENTS_EXPENSE, amount: 750, date: '2026-10-09' }),
-    entry({ id: 'd', categoryId: PARENTS_EXPENSE, amount: 3000, date: '2026-10-20' }),
-  ]
-  it('schlägt Posten vor, die genau passen, die ältesten zuerst', () => {
-    expect(suggestRefund(items, 3250)).toEqual(['a', 'b'])
-    // 2000 + 750 = 2750 is exact; the older 1250 does not fit into an exact total
-    expect(suggestRefund(items, 2750)).toEqual(['b', 'c'])
-    expect(suggestRefund(items, 7000)).toEqual(['a', 'b', 'c', 'd'])
-    // The order of the list does not matter
-    expect(suggestRefund([...items].reverse(), 3750)).toEqual(['c', 'd'])
+describe('Eltern-Abrechnungen mit Teilzahlungen', () => {
+  const expense = (month: string, amount: number, over: Partial<Entry> = {}) => entry({ categoryId: PARENTS_EXPENSE, date: `${month}-10`, amount, ...over })
+  const refund = (date: string, amount: number, over: Partial<Entry> = {}) => entry({ type: 'income', categoryId: PARENTS_REFUND, date, amount, ...over })
+  const data = [expense('2026-09', 5000), expense('2026-09', 1000), expense('2026-10', 3000), expense('2026-11', 2000)]
+
+  it('legt für jeden Monat mit Eltern-Ausgaben selbst eine Abrechnung an', () => {
+    const { statements: list, credit } = statements(data, '2026-11-08')
+    expect(list.map((s) => [s.month, s.total, s.status, s.running])).toEqual([
+      ['2026-09', 6000, 'open', false], ['2026-10', 3000, 'open', false], ['2026-11', 2000, 'open', true],
+    ])
+    expect(credit).toBe(0)
   })
-  it('nimmt ohne genauen Treffer die ältesten, solange sie in den Betrag passen', () => {
-    expect(suggestRefund(items, 3500)).toEqual(['a', 'b'])
-    expect(suggestRefund(items, 1000)).toEqual([])
+  it('bucht Teilzahlungen auf die älteste offene Abrechnung', () => {
+    const book = statements([...data, refund('2026-10-01', 4000), refund('2026-10-20', 2500)], '2026-11-08')
+    const [sep, oct, nov] = book.statements
+    expect(sep).toMatchObject({ paid: 6000, open: 0, status: 'paid' })
+    expect(sep.payments.map((p) => p.amount)).toEqual([4000, 2000])
+    expect(oct).toMatchObject({ paid: 500, open: 2500, status: 'partial' })
+    expect(nov).toMatchObject({ paid: 0, open: 2000, status: 'open' })
   })
-  it('zeigt den Rest an', () => {
-    expect(refundDifference(3500, 3250, formatEuro)).toBe(`${formatEuro(250)} zu viel erhalten`)
-    expect(refundDifference(3000, 3240, formatEuro)).toBe(`${formatEuro(240)} bleiben offen`)
-    expect(refundDifference(3250, 3250, formatEuro)).toBe('Passt genau')
+  it('bezahlt zuerst die zugeordnete Abrechnung, der Rest geht an die älteste offene', () => {
+    const book = statements([...data, refund('2026-11-05', 3500, { forMonth: '2026-10' })], '2026-11-08')
+    const [sep, oct] = book.statements
+    expect(oct).toMatchObject({ paid: 3000, open: 0, status: 'paid' })
+    expect(sep).toMatchObject({ paid: 500, open: 5500, status: 'partial' })
   })
-  it('zählt nur offene Eltern-Ausgaben, älteste zuerst', () => {
-    const list = [...items, entry({ id: 'x', categoryId: PARENTS_EXPENSE, refunded: true }), entry({ id: 'y', categoryId: 'exp-food' })].reverse()
-    expect(openItems(list).map((e) => e.id)).toEqual(['a', 'b', 'c', 'd'])
+  it('stimmt immer mit „Offen von Eltern“ überein und merkt sich zu viel Gezahltes', () => {
+    const all = [...data, refund('2026-10-01', 4000), refund('2026-11-02', 9000, { forMonth: '2026-11' })]
+    const book = statements(all, '2026-11-08')
+    const open = book.statements.reduce((sum, s) => sum + s.open, 0)
+    expect(open - book.credit).toBe(11000 - 13000)
+    expect(book.credit).toBe(2000)
+    expect(book.statements.every((s) => s.status === 'paid')).toBe(true)
   })
-  it('rechnet die Monatsabrechnung mit Übertrag', () => {
-    const all = [
-      entry({ categoryId: PARENTS_EXPENSE, amount: 5000, date: '2026-09-10' }),
-      entry({ type: 'income', categoryId: PARENTS_REFUND, amount: 4760, date: '2026-09-30' }),
-      ...items,
-      entry({ type: 'income', categoryId: PARENTS_REFUND, amount: 3250, date: '2026-10-25' }),
-      entry({ categoryId: PARENTS_EXPENSE, amount: 999, date: '2026-11-02' }),
-    ]
-    const s = parentsStatement(all, '2026-10')
-    expect(s.items.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd'])
-    expect(s).toMatchObject({ spent: 7000, refunds: 3250, carry: 240, open: 240 + 7000 - 3250 })
+  it('hakt Posten ab, sobald ihre Abrechnung ganz bezahlt ist', () => {
+    const ticked = expense('2026-10', 100, { refunded: true })
+    const book = statements([...data, ticked, refund('2026-10-01', 6000)], '2026-11-08')
+    const settled = settledItems(book)
+    expect(book.statements[0].items.every((e) => settled.has(e.id))).toBe(true)
+    expect(settled.has(ticked.id)).toBe(true)
+    expect(book.statements[1].items.filter((e) => !e.refunded).some((e) => settled.has(e.id))).toBe(false)
+  })
+  it('beschreibt, was eine Zahlung bewirkt', () => {
+    expect(paymentEffect(5000, 3000, formatEuro)).toBe(`Danach noch ${formatEuro(2000)} offen`)
+    expect(paymentEffect(5000, 5000, formatEuro)).toBe('Danach ganz bezahlt')
+    expect(paymentEffect(5000, 5600, formatEuro)).toBe(`Ganz bezahlt, ${formatEuro(600)} gehen an die nächste offene Abrechnung`)
   })
 })
 
@@ -251,7 +258,9 @@ describe('PDF', () => {
       await savePhotos([{ id, data: await jpeg(1200, 1800, { r: 200 + (i % 50), g: 220, b: 210 }) }])
       list.push(entry({ categoryId: PARENTS_EXPENSE, date: `2026-10-${String((i % 28) + 1).padStart(2, '0')}`, amount: 1000 + i, photos: [id], note: `Einkauf ${i} für Mama 🛒` }))
     }
-    const blob = await parentsReport(parentsStatement(list, '2026-10'), { name: 'Max Muster', created: '08.11.2026' })
+    const book = statements([...list, entry({ type: 'income', categoryId: PARENTS_REFUND, amount: 3000, date: '2026-11-01' })], '2026-11-08')
+    expect(book.statements[0].status).toBe('partial')
+    const blob = await parentsReport(book.statements[0], { name: 'Max Muster', created: '08.11.2026', earlierOpen: 0, settled: settledItems(book) })
     const head = new TextDecoder().decode((await blob.arrayBuffer()).slice(0, 5))
     expect(head).toBe('%PDF-')
     // Two pages for 40 rows and the sums, then 40 photo pages

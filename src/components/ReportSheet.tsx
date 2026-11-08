@@ -1,22 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, newId, PARENT_CATEGORIES, PARENTS_REFUND, setMeta, type Entry } from '../db'
+import { db, newId, PARENTS_REFUND, setMeta, type Entry } from '../db'
 import { useApp, useAskToShare, useCategories, useGroups, useMeta, useRangeEntries } from '../context'
 import { saveFile } from '../lib/backup'
 import { addMonths, formatDate, monthLabel, monthOf, monthRange, today } from '../lib/dates'
-import { formatEuro } from '../lib/format'
+import { amountToInput, formatEuro, parseAmount } from '../lib/format'
 import { haptic } from '../lib/haptics'
-import { parentsStatement } from '../lib/parents'
+import { settledItems, type Statement } from '../lib/parents'
 import { monthReport, parentsReport } from '../lib/pdf'
-import { parentsBalance, withoutParents } from '../lib/stats'
+import { withoutParents } from '../lib/stats'
+import { StatusBadge, useStatements } from './ParentsCard'
 import { MonthPicker, Segmented, Sheet, Switch } from './ui'
 
 export type ReportKind = 'parents' | 'month'
 
 /** Months whose parents report was made or whose reminder was dismissed */
 export const REPORT_DONE = 'parentsReportDone'
-
-const items = (n: number) => (n === 1 ? '1 offener Posten' : `${n} offene Posten`)
 
 const countPhotos = (entries: Entry[]) => entries.reduce((n, e) => n + (e.photos?.length ?? 0), 0)
 
@@ -36,15 +35,19 @@ export function ReportSheet({ month: initialMonth, kind: initialKind, onClose }:
   const [progress, setProgress] = useState<string | null>(null)
   const [from, to] = monthRange(month)
   const entries = useRangeEntries(from, to)
-  const parents = useLiveQuery(() => db.entries.where('categoryId').anyOf(PARENT_CATEGORIES).toArray(), [], [] as Entry[])
+  const { book } = useStatements()
+  const [payment, setPayment] = useState('')
 
   useEffect(() => { if (name === null && storedName !== undefined) setName(storedName) }, [storedName, name])
 
-  const statement = useMemo(() => parentsStatement(parents.filter((e) => e.date <= to), month), [parents, month, to])
-  // Repayments after the month end are not on the report, but the user should see what is open today
-  const openToday = useMemo(() => parentsBalance(parents).open, [parents])
+  const empty: Statement = { month, items: [], total: 0, paid: 0, open: 0, status: 'paid', payments: [], running: month >= monthOf(today()) }
+  const statement = book.statements.find((st) => st.month === month) ?? empty
+  const earlierOpen = book.statements.filter((st) => st.month < month).reduce((sum, st) => sum + st.open, 0)
+  const settled = useMemo(() => settledItems(book), [book])
   const shown = withoutParents(entries, hide)
-  const openItems = statement.items.filter((e) => !e.refunded)
+
+  // The payment field starts with what is open; a smaller amount is a partial payment
+  useEffect(() => setPayment(statement.open > 0 ? amountToInput(statement.open) : ''), [month, statement.open])
   const photos = kind === 'parents' ? countPhotos(statement.items) : withPhotos ? countPhotos(shown) : 0
 
   const create = async () => {
@@ -56,7 +59,7 @@ export function ReportSheet({ month: initialMonth, kind: initialKind, onClose }:
     const options = { name: own, created: formatDate(today()) }
     try {
       const blob = kind === 'parents'
-        ? await parentsReport(statement, options, onProgress)
+        ? await parentsReport(statement, { ...options, earlierOpen, settled }, onProgress)
         : await monthReport(month, shown, categories, groups, { ...options, photos: withPhotos, hiddenParents: hide }, onProgress)
       setProgress('Bereit zum Teilen …')
       const file = kind === 'parents' ? `Abrechnung-Eltern-${month}.pdf` : `Monatsbericht-${month}.pdf`
@@ -71,30 +74,16 @@ export function ReportSheet({ month: initialMonth, kind: initialKind, onClose }:
     }
   }
 
-  const markAll = () => {
-    const open = openItems.reduce((sum, e) => sum + e.amount, 0)
-    const tick = async (book: boolean) => {
-      await db.entries.bulkUpdate(openItems.map((e) => ({ key: e.id, changes: { refunded: true } })))
-      if (book) {
-        await db.entries.add({
-          id: newId(), type: 'income', amount: statement.open, categoryId: PARENTS_REFUND, date: today(),
-          note: `Abrechnung ${monthLabel(month)}`, createdAt: Date.now(),
-        })
-      }
-      haptic()
-      toast(book ? `Markiert, ${formatEuro(statement.open)} als Rückzahlung gebucht` : `${openItems.length} Posten als erstattet markiert`)
-    }
-    alert({
-      title: 'Alle Posten als erstattet markieren?',
-      message: statement.open > 0
-        ? `${items(openItems.length)} über ${formatEuro(open)}. Hast du die Rückzahlung schon gebucht, wähle „Nur markieren“. Sonst bucht die App den offenen Betrag von ${formatEuro(statement.open)} als Einnahme in „Kostenrückzahlung Eltern“, damit „Offen von Eltern“ stimmt.`
-        : `${items(openItems.length)} über ${formatEuro(open)}.`,
-      buttons: [
-        ...(statement.open > 0 ? [{ label: `${formatEuro(statement.open)} buchen und markieren`, onClick: () => { tick(true) } }] : []),
-        { label: 'Nur markieren', onClick: () => { tick(false) } },
-        { label: 'Abbrechen', style: 'strong' as const },
-      ],
+  const cents = parseAmount(payment)
+  const bookPayment = async () => {
+    if (cents === null) return
+    await db.entries.add({
+      id: newId(), type: 'income', amount: cents, categoryId: PARENTS_REFUND, date: today(), forMonth: month,
+      note: `Abrechnung ${monthLabel(month)}`, createdAt: Date.now(),
     })
+    haptic()
+    const left = statement.open - cents
+    toast(left > 0 ? `Teilzahlung gebucht, noch ${formatEuro(left)} offen` : 'Abrechnung ganz bezahlt')
   }
 
   return (
@@ -106,17 +95,18 @@ export function ReportSheet({ month: initialMonth, kind: initialKind, onClose }:
       {kind === 'parents'
         ? (
           <div className="card report-preview">
-            <span className="row-sub">Abrechnung Eltern – {monthLabel(month)}</span>
+            <span className="row-sub">Abrechnung Eltern – {monthLabel(month)} {statement.items.length > 0 && <StatusBadge statement={statement} />}</span>
             <dl className="report-lines num">
-              <dt>Ausgaben ({statement.items.length} Posten)</dt><dd>{formatEuro(statement.spent)}</dd>
-              <dt>Rückzahlungen im Monat</dt><dd>{statement.refunds > 0 ? `−${formatEuro(statement.refunds)}` : formatEuro(0)}</dd>
-              {statement.carry !== 0 && <><dt>{statement.carry > 0 ? 'Offen aus Vormonaten' : 'Guthaben aus Vormonaten'}</dt><dd>{statement.carry > 0 ? formatEuro(statement.carry) : `−${formatEuro(-statement.carry)}`}</dd></>}
+              <dt>Ausgaben ({statement.items.length} Posten)</dt><dd>{formatEuro(statement.total)}</dd>
+              <dt>Bereits bezahlt</dt><dd>{statement.paid > 0 ? `−${formatEuro(statement.paid)}` : formatEuro(0)}</dd>
+              {statement.payments.map((p) => <Fragment key={p.refund.id}><dt className="report-payment">am {formatDate(p.refund.date)}</dt><dd className="report-payment">{formatEuro(p.amount)}</dd></Fragment>)}
             </dl>
             <div className="report-open">
-              <span>{statement.open >= 0 ? 'Offener Betrag' : 'Zu viel erstattet'}</span>
-              <strong className="num">{formatEuro(Math.abs(statement.open))}</strong>
+              <span>{statement.items.length > 0 && statement.status === 'paid' ? 'Ganz bezahlt' : 'Offener Betrag'}</span>
+              <strong className="num">{formatEuro(statement.items.length > 0 && statement.status === 'paid' ? statement.paid : statement.open)}</strong>
             </div>
-            {openToday !== statement.open && month < monthOf(today()) && <span className="row-sub">Stand Monatsende. Heute noch offen: {formatEuro(openToday)}</span>}
+            {earlierOpen > 0 && <span className="row-sub">Aus früheren Abrechnungen noch offen: {formatEuro(earlierOpen)}</span>}
+            {statement.running && statement.items.length > 0 && <span className="row-sub">Der Monat läuft noch, neue Eltern-Ausgaben kommen dazu.</span>}
             <span className="row-sub">{photos === 0 ? 'Keine Belegfotos' : `${photos} ${photos === 1 ? 'Belegfoto' : 'Belegfotos'} im Anhang`}</span>
           </div>
         )
@@ -150,11 +140,19 @@ export function ReportSheet({ month: initialMonth, kind: initialKind, onClose }:
       <button className="primary-btn" disabled={!!progress} onClick={create}>{progress ?? 'PDF erstellen und teilen'}</button>
       <p className="section-foot">Das PDF entsteht auf dem iPhone. Über das Teilen-Menü schickst du es per WhatsApp oder Mail oder sicherst es in Dateien.</p>
 
-      {kind === 'parents' && openItems.length > 0 && (
+      {kind === 'parents' && statement.open > 0 && (
         <>
-          <div style={{ height: 8 }} />
-          <button className="secondary-btn wide" onClick={markAll}>Alle Posten dieser Abrechnung als erstattet markieren</button>
-          <p className="section-foot">Zum Beispiel, nachdem deine Eltern den Betrag überwiesen haben.</p>
+          <h3 className="section-title">Zahlung deiner Eltern</h3>
+          <div className="group">
+            <label className="row">
+              <span className="row-main">Betrag in €</span>
+              <input type="text" inputMode="decimal" aria-label="Gezahlter Betrag" value={payment} onChange={(e) => setPayment(e.target.value)} />
+            </label>
+            <button className="row center tint row-sep" disabled={cents === null} style={cents === null ? { opacity: 0.4 } : undefined} onClick={bookPayment}>
+              {cents !== null && cents < statement.open ? 'Teilzahlung buchen' : 'Als bezahlt buchen'}
+            </button>
+          </div>
+          <p className="section-foot">Bucht den Betrag als Einnahme in „Kostenrückzahlung Eltern“ für diese Abrechnung. Für eine Teilzahlung den Betrag ändern. Ist die Abrechnung ganz bezahlt, gelten alle ihre Posten als erstattet.</p>
         </>
       )}
       <div style={{ height: 24 }} />

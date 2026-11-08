@@ -4,12 +4,14 @@ import { Paperclip } from 'lucide-react'
 import { db, PARENTS_EXPENSE, type Category, type Entry, type EntryType } from '../db'
 import { useApp, useCategories } from '../context'
 import { Icon } from '../components/Icon'
+import { useStatements } from '../components/ParentsCard'
 import { PhotoViewer } from '../components/PhotoViewer'
 import { SwipeRow } from '../components/SwipeRow'
 import { MonthPicker } from '../components/ui'
 import { CategoryIcon, categoryText } from '../components/CategoryIcon'
 import { dayLabel, formatDate, monthRange } from '../lib/dates'
 import { formatEuro } from '../lib/format'
+import { settledItems } from '../lib/parents'
 
 const TYPE_CHIPS: [EntryType | 'all', string][] = [['all', 'Alle'], ['expense', 'Ausgaben'], ['saving', 'Sparen'], ['income', 'Einnahmen']]
 const SIGN: Record<EntryType, string> = { expense: '−', saving: '', income: '+' }
@@ -18,7 +20,7 @@ export function EntryAmount({ entry }: { entry: Entry }) {
   return <span className={`row-value num amount-${entry.type}`} style={entry.type === 'expense' ? { color: 'var(--label)' } : undefined}>{SIGN[entry.type]}{formatEuro(entry.amount)}</span>
 }
 
-function EntryRow({ entry, category }: { entry: Entry; category?: Category }) {
+function EntryRow({ entry, category, settled }: { entry: Entry; category?: Category; settled: boolean }) {
   const { openEntry, deleteEntry } = useApp()
   const [viewing, setViewing] = useState(false)
   const detail = entry.merchant && entry.note ? `${entry.merchant} · ${entry.note}` : entry.merchant || entry.note
@@ -31,10 +33,10 @@ function EntryRow({ entry, category }: { entry: Entry; category?: Category }) {
           <CategoryIcon category={category} />
           <span className="row-main">
             <button className="row-link row-title" onClick={() => openEntry(entry)}>{category?.name ?? 'Ohne Kategorie'}</button>
-            {(detail || entry.recurringId || entry.refunded) && (
+            {(detail || entry.recurringId || settled) && (
               <span className="row-sub" style={{ display: 'block' }}>
                 {entry.recurringId && <span className="badge">Dauerauftrag</span>}
-                {entry.categoryId === PARENTS_EXPENSE && entry.refunded && <span className="badge">Erstattet</span>}
+                {settled && <span className="badge">Erstattet</span>}
                 {detail}
               </span>
             )}
@@ -71,6 +73,8 @@ export function Entries() {
   }, [month, allMonths], [] as Entry[])
 
   const byId = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+  const { book } = useStatements()
+  const settled = useMemo(() => settledItems(book), [book])
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -128,7 +132,7 @@ export function Entries() {
         <section key={date}>
           <div className="day-title"><span>{dayLabel(date)}</span></div>
           <div className="group">
-            {rows.map((entry) => <EntryRow key={entry.id} entry={entry} category={byId.get(entry.categoryId)} />)}
+            {rows.map((entry) => <EntryRow key={entry.id} entry={entry} category={byId.get(entry.categoryId)} settled={entry.categoryId === PARENTS_EXPENSE && settled.has(entry.id)} />)}
           </div>
         </section>
       ))}

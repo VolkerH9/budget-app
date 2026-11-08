@@ -2,7 +2,7 @@ import type { jsPDF as JsPdf } from 'jspdf'
 import type { Category, Entry, EntryType, Group } from '../db'
 import { formatDate, monthLabel } from './dates'
 import { formatEuro, formatPercent } from './format'
-import type { ParentsStatement } from './parents'
+import { STATUS_LABEL, type Statement } from './parents'
 import { summarize } from './stats'
 import { loadPhoto } from './vault'
 
@@ -270,7 +270,10 @@ function numberPhotos(entries: Entry[]): { pages: PhotoPage[]; labels: Map<strin
 }
 
 /** "Abrechnung Eltern – November 2026" with all expenses for the parents, the open amount and the receipts. */
-export async function parentsReport(statement: ParentsStatement, options: ReportOptions, onProgress?: (done: number, total: number) => void): Promise<Blob> {
+export async function parentsReport(
+  statement: Statement,
+  options: ReportOptions & { earlierOpen: number; settled: Set<string> },
+  onProgress?: (done: number, total: number) => void): Promise<Blob> {
   const month = monthLabel(statement.month)
   const monthName = month.split(' ')[0]
   const title = `Abrechnung Eltern – ${month}`
@@ -291,25 +294,29 @@ export async function parentsReport(statement: ParentsStatement, options: Report
     w.note('In diesem Monat gibt es keine Ausgaben in der Kategorie „Eltern“.')
   } else {
     w.tableHead(columns)
-    statement.items.forEach((e, i) => {
+    statement.items.forEach((e: Entry, i: number) => {
       const label = labels.get(e.id)
       const text = label ? `${describe(e)}  (${label})` : describe(e)
-      w.row(columns, [formatDate(e.date), text, euro(e.amount), e.refunded ? 'erstattet' : 'offen'], {
+      const settled = options.settled.has(e.id)
+      w.row(columns, [formatDate(e.date), text, euro(e.amount), settled ? 'erstattet' : 'offen'], {
         zebra: i % 2 === 1,
-        rgb: [INK, INK, INK, e.refunded ? MUTED : TINT],
+        rgb: [INK, INK, INK, settled ? MUTED : TINT],
       })
     })
   }
 
   w.y += 6
-  w.line(`Summe der Eltern-Ausgaben im ${monthName}`, euro(statement.spent), { bold: true })
-  w.line(`Im ${monthName} erhaltene Rückzahlungen`, statement.refunds > 0 ? `- ${euro(statement.refunds)}` : euro(0))
-  if (statement.carry !== 0) {
-    w.line(statement.carry > 0 ? 'Offen aus den Vormonaten' : 'Guthaben aus den Vormonaten', statement.carry > 0 ? euro(statement.carry) : `- ${euro(-statement.carry)}`)
-  }
+  w.line(`Summe der Eltern-Ausgaben im ${monthName}`, euro(statement.total), { bold: true })
+  w.line('Bereits bezahlt', statement.paid > 0 ? `- ${euro(statement.paid)}` : euro(0))
+  for (const p of statement.payments) w.line(`    Zahlung vom ${formatDate(p.refund.date)}`, euro(p.amount), { rgb: MUTED })
   w.y += 3
-  w.highlight(statement.open >= 0 ? 'Offener Betrag' : 'Zu viel erstattet', euro(Math.abs(statement.open)))
-  w.note('Offener Betrag = alle Ausgaben in „Eltern“ bis Monatsende minus alle Rückzahlungen bis Monatsende. „Erstattet“ markiert Posten, die schon zurückgezahlt sind.')
+  if (statement.status === 'paid') w.highlight('Ganz bezahlt', euro(statement.paid))
+  else w.highlight('Offener Betrag', euro(statement.open))
+  const status = statement.running && statement.status !== 'paid' ? 'Der Monat läuft noch.' : `Status: ${STATUS_LABEL[statement.status]}.`
+  w.note(`${status} „Erstattet“ markiert Posten, die schon zurückgezahlt sind. Ist die Abrechnung ganz bezahlt, gelten alle ihre Posten als erstattet.`)
+  if (options.earlierOpen > 0) w.line('Aus früheren Abrechnungen noch offen', euro(options.earlierOpen))
+  if (options.earlierOpen > 0) w.line('Insgesamt offen', euro(options.earlierOpen + statement.open), { bold: true })
+  if (options.earlierOpen > 0) w.y += 3
   if (pages.length > 0) w.note(`Im Anhang: ${pages.length} ${pages.length === 1 ? 'Beleg' : 'Belege'}, nummeriert wie in der Tabelle.`)
 
   await appendPhotos(w, pages, onProgress)

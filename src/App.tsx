@@ -3,7 +3,7 @@ import { db, PARENTS_REFUND, requestPersistence, type Entry } from './db'
 import { Icon, type IconName } from './components/Icon'
 import { Alert, Toast } from './components/ui'
 import { EntrySheet } from './components/EntrySheet'
-import { RefundSheet } from './components/ParentsCard'
+import { AssignSheet } from './components/ParentsCard'
 import { ReportSheet, type ReportKind } from './components/ReportSheet'
 import { Ctx, type AlertRequest, type AppContext, type SettingsPage } from './context'
 import { bookDueEntries } from './lib/booking'
@@ -47,7 +47,7 @@ export function App() {
   const [refund, setRefund] = useState<Entry | null>(null)
   const [report, setReport] = useState<{ month?: string; kind?: ReportKind } | null>(null)
 
-  /** A new repayment from the parents asks which open expenses it covers */
+  /** A new repayment from the parents asks which monthly statement it pays */
   const onSaved = useCallback((saved: Entry, before?: Entry) => {
     const isRefund = (e?: Entry) => e?.type === 'income' && e.categoryId === PARENTS_REFUND
     if (isRefund(saved) && !isRefund(before)) setRefund(saved)
@@ -109,7 +109,7 @@ export function App() {
             <button className="fab" aria-label="Neuer Eintrag" onClick={() => setSheet({})}><Icon name="plus" size={30} width={2.4} /></button>
           </div>
           {sheet && <EntrySheet entry={sheet.entry} onClose={() => setSheet(null)} onSaved={onSaved} />}
-          {refund && <RefundSheet refund={refund} onClose={closeRefund} />}
+          {refund && <AssignSheet refund={refund} onClose={closeRefund} />}
           {report && <ReportSheet month={report.month} kind={report.kind} onClose={() => setReport(null)} />}
           {toast && <Toast key={toast.id} text={toast.text} onUndo={toast.onUndo} onDone={hideToast} />}
           {alert && <Alert {...alert} onClose={() => setAlert(null)} />}

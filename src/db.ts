@@ -46,6 +46,8 @@ export interface Entry {
   recurringKey?: string
   /** Parents paid this expense back */
   refunded?: boolean
+  /** Repayment from the parents: the month of the statement it pays first */
+  forMonth?: string
   createdAt: number
   sample?: boolean
 }

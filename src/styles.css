@@ -2447,13 +2447,19 @@ button.cmp-row:active {
   font-weight: 600;
 }
 
-.refund-diff {
-  color: var(--orange, var(--label2));
-  font-weight: 600;
+.badge.status-paid {
+  background: rgba(42, 131, 80, 0.14);
+  color: var(--green);
 }
 
-.refund-diff.ok {
-  color: var(--green);
+.badge.status-partial {
+  background: var(--tint-soft);
+  color: var(--tint);
+}
+
+.report-lines .report-payment {
+  padding-left: 12px;
+  font-size: 13px;
 }
 
 .report-preview {

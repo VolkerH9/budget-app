@@ -11,6 +11,7 @@ import { Ring } from '../components/Ring'
 import { CountUp, MonthPicker, Segmented, Trend, useMonthSwipe, useSticky, YearPicker } from '../components/ui'
 import { useBackupExport } from '../components/BackupExport'
 import { REPORT_DONE } from '../components/ReportSheet'
+import { statements } from '../lib/parents'
 import { backupState, parentsReportDue } from '../lib/reminders'
 import { addMonths, formatTime, monthLabel, monthShort, today } from '../lib/dates'
 import { formatEuro, formatPercent } from '../lib/format'
@@ -159,13 +160,16 @@ function ParentsReportHint({ parents }: { parents: Entry[] }) {
   const enabled = useMeta('parentsReminder', true)
   const done = useMeta<string[]>(REPORT_DONE, [])
   const month = parentsReportDue(today(), parents, done, enabled)
-  if (!month) return null
+  const statement = useMemo(() => (month ? statements(parents, today()).statements.find((s) => s.month === month) : undefined), [month, parents])
+  if (!month || !statement) return null
   return (
     <div className="card reminder">
       <FileText size={20} strokeWidth={1.8} aria-hidden="true" />
       <button className="row-main" style={{ textAlign: 'left' }} onClick={() => openReport({ month, kind: 'parents' })}>
-        <b>Abrechnung Eltern für {monthLabel(month).split(' ')[0]} erstellen?</b>
-        <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>PDF mit allen Posten und Belegen zum Teilen</span>
+        <b>Abrechnung Eltern für {monthLabel(month).split(' ')[0]} ist fertig</b>
+        <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>
+          {formatEuro(statement.total)}{statement.paid > 0 ? `, davon ${formatEuro(statement.open)} offen` : ''}. Antippen, um sie als PDF zu teilen.
+        </span>
       </button>
       <button className="icon-btn" aria-label="Erinnerung ausblenden" onClick={() => setMeta(REPORT_DONE, [...done, month].slice(-36))}><X size={18} /></button>
     </div>
