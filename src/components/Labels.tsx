@@ -8,6 +8,7 @@ import { amountToInput, formatEuro, formatPercent, parseAmount } from '../lib/fo
 import { haptic } from '../lib/haptics'
 import { applyBulk, daysLeft, isActiveOn, labelSummary, type BulkAction } from '../lib/labels'
 import { budgetLevel } from '../lib/stats'
+import { labelProgress } from '../lib/budgets'
 import { CategoryIcon, categoryText, ICONS } from './CategoryIcon'
 import { Ring } from './Ring'
 import { CountUp, Segmented, Sheet } from './ui'
@@ -270,6 +271,7 @@ export function LabelDetail({ id, onClose }: { id: string; onClose: () => void }
   const left = daysLeft(label, now)
   const active = isActiveOn(label, now)
   const level = label.budget ? budgetLevel(summary.total, label.budget) : null
+  const forecast = label.budget ? labelProgress(tagged, label, now, formatEuro).forecast : null
   const otherLabels = labels.filter((l) => l.id !== id)
   const onEntries = otherLabels.filter((l) => tagged.some((e) => e.labels?.includes(l.id)))
 
@@ -298,6 +300,7 @@ export function LabelDetail({ id, onClose }: { id: string; onClose: () => void }
                 {label.budget - summary.total < 0 ? `${formatEuro(summary.total - label.budget)} drüber` : `${formatEuro(label.budget - summary.total)} übrig`}
               </span>
             </div>
+            {forecast && <div className={`forecast ${forecast.startsWith('Bei diesem') ? 'warn' : ''}`}>{forecast}</div>}
           </div>
         )}
       </div>

@@ -61,7 +61,7 @@ describe('Umbenennung Kino & Freizeit', () => {
     backup.categories = backup.categories.map((c) => (c.id === 'exp-freizeit' ? { ...c, name: 'Kino & Freizeit' } : c))
     await restoreBackup(parseBackup(JSON.stringify(backup)))
     expect((await db.categories.get('exp-freizeit'))?.name).toBe('Freizeit')
-    expect(migrateData({ categories: backup.categories, groups: [], entries: [], recurring: [], meta: [], labels: [] }, 3).categories.find((c) => c.id === 'exp-freizeit')?.name).toBe('Freizeit')
+    expect(migrateData({ categories: backup.categories, groups: [], entries: [], recurring: [], meta: [], labels: [], budgets: [], goals: [] }, 3).categories.find((c) => c.id === 'exp-freizeit')?.name).toBe('Freizeit')
   })
 })
 

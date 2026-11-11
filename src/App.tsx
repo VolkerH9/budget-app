@@ -6,7 +6,7 @@ import { EntrySheet } from './components/EntrySheet'
 import { AssignSheet } from './components/ParentsCard'
 import { ReportSheet, type ReportKind } from './components/ReportSheet'
 import { LabelDetail } from './components/Labels'
-import { Ctx, type AlertRequest, type AppContext, type SettingsPage } from './context'
+import { Ctx, type AlertRequest, type AppContext, type SettingsPage, type Tab } from './context'
 import { bookDueEntries } from './lib/booking'
 import { monthOf, today } from './lib/dates'
 import { saving } from './lib/vault'
@@ -17,7 +17,6 @@ import { Budgets } from './pages/Budgets'
 import { Settings } from './pages/Settings'
 import { LockGate } from './components/LockGate'
 
-type Tab = 'overview' | 'entries' | 'analysis' | 'budgets' | 'settings'
 
 const TABS: [Tab, string, IconName][] = [
   ['overview', 'Übersicht', 'overview'],
@@ -88,6 +87,7 @@ export function App() {
     clearSettingsPage,
     openReport: (options) => setReport(options ?? {}),
     openLabel: setLabel,
+    openTab: setTab,
   }), [month, showToast, settingsPage, clearSettingsPage])
 
   return (

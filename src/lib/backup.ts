@@ -1,4 +1,4 @@
-import { db, getMeta, setMeta, type Category, type Entry, type Group, type Label, type Recurring } from '../db'
+import { db, getMeta, setMeta, type Category, type Entry, type Goal, type Group, type Label, type PeriodBudget, type Recurring } from '../db'
 import { isValidIso, today } from './dates'
 import { expectSystemDialog } from './lockGuard'
 import { DATA_VERSION, migrateData } from './migrate'
@@ -31,6 +31,9 @@ export interface Backup {
   photos?: PhotoRef[]
   /** Since version 5 */
   labels?: Label[]
+  /** Since version 6 */
+  budgets?: PeriodBudget[]
+  goals?: Goal[]
 }
 
 /** A backup file since version 4: everything inside `data` is encrypted, photos included. */
@@ -62,6 +65,8 @@ export async function createBackup(): Promise<Backup> {
     entries: await db.entries.orderBy('date').toArray(),
     recurring: await db.recurring.toArray(),
     labels: await db.labels.toArray(),
+    budgets: await db.budgets.toArray(),
+    goals: await db.goals.toArray(),
     settings: {
       savingsGoal: await getMeta<number | null>('savingsGoal', null),
       saveThumbnails: await getMeta('saveThumbnails', true),
@@ -202,6 +207,8 @@ export function parseBackup(text: string): Backup {
   if (data.labels !== undefined && (!Array.isArray(data.labels) || !data.labels.every((l) => typeof l?.id === 'string' && typeof l.name === 'string'))) {
     throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
   }
+  const listOk = (list: unknown) => list === undefined || (Array.isArray(list) && list.every((x) => typeof x?.id === 'string'))
+  if (!listOk(data.budgets) || !listOk(data.goals)) throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
   const labelsOk = (e: Entry) => e.labels === undefined || (Array.isArray(e.labels) && e.labels.every((id) => typeof id === 'string'))
   const photosOk = (e: Entry) => e.photos === undefined || (Array.isArray(e.photos) && e.photos.every((id) => typeof id === 'string'))
   const entriesOk = data.entries.every((e) => typeof e.id === 'string' && isType(e.type) && isCents(e.amount) && isValidIso(e.date) && categoryIds.has(e.categoryId) && photosOk(e) && labelsOk(e))
@@ -215,10 +222,12 @@ export function parseBackup(text: string): Backup {
 export async function restoreBackup(backup: Backup, photos: Photo[] = []): Promise<void> {
   // Photos first, so no restored entry points to a missing photo
   await savePhotos(photos)
-  const data = migrateData({ categories: backup.categories, groups: backup.groups ?? [], entries: backup.entries, recurring: backup.recurring, meta: [], labels: backup.labels ?? [] }, backup.version)
-  await db.transaction('rw', [db.categories, db.groups, db.entries, db.recurring, db.meta, db.labels], async () => {
-    await Promise.all([db.categories.clear(), db.groups.clear(), db.entries.clear(), db.recurring.clear(), db.labels.clear()])
+  const data = migrateData({ categories: backup.categories, groups: backup.groups ?? [], entries: backup.entries, recurring: backup.recurring, meta: [], labels: backup.labels ?? [], budgets: backup.budgets ?? [], goals: backup.goals ?? [] }, backup.version)
+  await db.transaction('rw', [db.categories, db.groups, db.entries, db.recurring, db.meta, db.labels, db.budgets, db.goals], async () => {
+    await Promise.all([db.categories.clear(), db.groups.clear(), db.entries.clear(), db.recurring.clear(), db.labels.clear(), db.budgets.clear(), db.goals.clear()])
     await db.labels.bulkAdd(data.labels)
+    await db.budgets.bulkAdd(data.budgets)
+    await db.goals.bulkAdd(data.goals)
     await db.groups.bulkAdd(data.groups)
     await db.categories.bulkAdd(data.categories)
     await db.entries.bulkAdd(data.entries)

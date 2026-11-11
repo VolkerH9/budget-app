@@ -18,9 +18,10 @@ import { backupState, parentsReportDue } from '../lib/reminders'
 import { addMonths, formatTime, monthLabel, monthShort, today } from '../lib/dates'
 import { formatEuro, formatPercent } from '../lib/format'
 import { reminders } from '../lib/subscriptions'
-import { budgetRows, expenseSegments, inPeriod, monthlySeries, monthPeriod, summarize, withoutParents, yearPeriod, type MonthRow, type Segment } from '../lib/stats'
+import { expenseSegments, inPeriod, monthlySeries, monthPeriod, summarize, withoutParents, yearPeriod, type MonthRow, type Segment } from '../lib/stats'
 import { useTheme } from '../lib/theme'
-import { BudgetBar } from './Budgets'
+import { GoalRing, useBudgetItems } from './Budgets'
+import { rank } from '../lib/budgets'
 
 export function useDark(): boolean {
   const hud = useTheme() === 'hud'
@@ -157,6 +158,46 @@ function BackupHint() {
   )
 }
 
+const noop = () => {}
+
+/** The most pressing budgets and goals, compact; the rest is on the Budgets tab */
+function TopBudgets({ month }: { month: string }) {
+  const { openTab } = useApp()
+  const all = rank(useBudgetItems(month, noop))
+  // Up to two savings goals always show; the most pressing budgets fill the rest
+  const goals = all.filter((i) => i.goal).slice(0, 2)
+  const items = [...all.filter((i) => !i.goal).slice(0, 4 - goals.length), ...goals]
+  if (items.length === 0) return null
+  return (
+    <>
+      <div className="section-head">
+        <h2 className="section-title strong">Budgets & Ziele</h2>
+        <button className="link-btn" onClick={() => openTab('budgets')}>Alle ›</button>
+      </div>
+      <div className="group">
+        {items.map((i) => {
+          const ratio = i.goal ? i.goal.ratio : i.progress!.ratio
+          const level = i.goal ? i.goal.level : i.progress!.level
+          const detail = i.goal
+            ? (i.goal.reached ? 'Erreicht' : i.goal.monthlyRate !== null ? `${formatEuro(i.goal.missing)} fehlen · ${formatEuro(i.goal.monthlyRate)}/Monat` : `${formatEuro(i.goal.missing)} fehlen`)
+            : i.progress!.rest < 0 ? `${formatEuro(-i.progress!.rest)} drüber` : `${formatEuro(i.progress!.rest)} übrig`
+          return (
+            <button key={i.key} className="row compact-budget" onClick={() => openTab('budgets')}>
+              {i.goal ? <GoalRing ratio={ratio} level={level} size={34} /> : i.icon}
+              <span className="row-main">
+                <span className="row-title" style={{ display: 'block' }}>{i.name}{i.sub && <span className="row-sub"> · {i.sub}</span>}</span>
+                {!i.goal && <span className={`bar thin ${level}`}><span style={{ width: `${Math.min(100, ratio * 100)}%` }} /></span>}
+                <span className={`row-sub ${level === 'ok' ? '' : `text-${level}`}`} style={{ display: 'block' }}>{detail}</span>
+              </span>
+              <span className="row-value num">{Math.round(ratio * 100)} %</span>
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
 /** "🏔️ Skiurlaub Tirol aktiv · noch 4 Tage" while a label's period runs */
 function ActiveLabels() {
   const { openLabel } = useApp()
@@ -227,7 +268,6 @@ export function Overview() {
   const summary = summarize(entries)
   const prevSummary = summarize(inPeriod(all, previous))
   const segments = expenseSegments(entries, categories, groups)
-  const budgets = budgetRows(entries, categories)
   const rows = mode === 'month'
     ? monthlySeries(all, month, 6)
     : monthlySeries(inPeriod(all, whole), `${year}-12`, 12)
@@ -304,14 +344,7 @@ export function Overview() {
           )}
       </div>
 
-      {mode === 'month' && budgets.length > 0 && (
-        <>
-          <h2 className="section-title strong">Budgets</h2>
-          <div className="group">
-            {budgets.map((row) => <BudgetBar key={row.category.id} row={row} />)}
-          </div>
-        </>
-      )}
+      {mode === 'month' && <TopBudgets month={month} />}
 
       <h2 className="section-title strong">{mode === 'month' ? 'Letzte 6 Monate' : `Monate ${year}`}</h2>
       <div className="card">

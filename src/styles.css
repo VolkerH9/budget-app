@@ -2675,3 +2675,172 @@ button.label-chip:active {
   width: 100%;
   margin-top: 8px;
 }
+
+/* Budgets & Ziele */
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-head .link-btn {
+  margin: 0 4px;
+  font-size: 15px;
+}
+
+.budget-sub {
+  display: block;
+  color: var(--label2);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.forecast {
+  margin-top: 6px;
+  color: var(--label2);
+  font-size: 13px;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.forecast.warn {
+  color: var(--yellow);
+}
+
+.goal-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  animation: rise 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.goal-main {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+
+.goal-title {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.goal-lines {
+  display: grid;
+  gap: 1px;
+  color: var(--label2);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.goal-lines b {
+  color: var(--label);
+  font-weight: 600;
+}
+
+.goal-ring {
+  flex: none;
+}
+
+.goal-ring circle {
+  fill: none;
+  stroke-width: 6;
+}
+
+.goal-ring .track {
+  stroke: var(--fill);
+}
+
+.goal-ring .fill {
+  stroke: var(--green);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.goal-ring.warn .fill {
+  stroke: var(--yellow-bar);
+}
+
+.goal-ring.over .fill {
+  stroke: var(--red-bar);
+}
+
+.goal-ring text {
+  fill: var(--label);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--num-font);
+}
+
+.compact-budget .goal-ring circle {
+  stroke-width: 4;
+}
+
+.compact-budget .goal-ring text {
+  font-size: 0;
+}
+
+.goal-emoji {
+  font-size: 20px;
+}
+
+.label-dot {
+  --c: var(--tint);
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--c) 18%, transparent);
+  color: var(--c);
+}
+
+.empty-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  color: var(--tint);
+  text-align: left;
+}
+
+.empty-card b {
+  color: var(--label);
+}
+
+.bar.thin {
+  display: block;
+  height: 5px;
+  margin: 5px 0 3px;
+}
+
+.bar.thin > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--tint);
+  transition: width 0.4s;
+}
+
+.bar.thin.warn > span {
+  background: var(--yellow-bar);
+}
+
+.bar.thin.over > span {
+  background: var(--red-bar);
+}
+
+.text-warn {
+  color: var(--yellow) !important;
+}
+
+.text-over {
+  color: var(--red) !important;
+}

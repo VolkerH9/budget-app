@@ -30,7 +30,11 @@ export interface AppContext {
   openReport: (options?: { month?: string; kind?: 'parents' | 'month' }) => void
   /** Opens the overview of a label */
   openLabel: (id: string) => void
+  /** Switches to a tab of the bottom bar */
+  openTab: (tab: Tab) => void
 }
+
+export type Tab = 'overview' | 'entries' | 'analysis' | 'budgets' | 'settings'
 
 export const Ctx = createContext<AppContext>(null as unknown as AppContext)
 export const useApp = () => useContext(Ctx)

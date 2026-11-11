@@ -10,6 +10,8 @@ export interface Group {
   name: string
   color: string
   order: number
+  /** Monthly budget for the whole overcategory, in cents */
+  budget?: number
 }
 
 export interface Category {
@@ -103,6 +105,39 @@ export interface Label {
   createdAt: number
 }
 
+/** Budget for a category or overcategory over a quarter, a year, or fixed dates */
+export interface PeriodBudget {
+  id: string
+  scope: 'category' | 'group'
+  targetId: string
+  /** In cents */
+  amount: number
+  /** 'quarter' and 'year' start again every quarter or year; 'custom' runs from–to once */
+  period: 'quarter' | 'year' | 'custom'
+  from?: string
+  to?: string
+  createdAt: number
+}
+
+/** Savings goal, e.g. "Skiurlaub" with 1.500 € by 01.02.2027 */
+export interface Goal {
+  id: string
+  name: string
+  emoji: string
+  /** In cents */
+  target: number
+  /** Date the goal should be reached */
+  due: string
+  /** Savings from this day on count */
+  start: string
+  /** Already saved before the start, in cents */
+  initial?: number
+  /** Saving categories that count; all of them when empty */
+  categoryIds?: string[]
+  archived?: boolean
+  createdAt: number
+}
+
 export interface Meta {
   key: string
   value: unknown
@@ -115,9 +150,11 @@ export type Tables = {
   recurring: EntityTable<Recurring, 'id'>
   meta: EntityTable<Meta, 'key'>
   labels: EntityTable<Label, 'id'>
+  budgets: EntityTable<PeriodBudget, 'id'>
+  goals: EntityTable<Goal, 'id'>
 }
 
-export const TABLES = ['categories', 'groups', 'entries', 'recurring', 'meta', 'labels'] as const
+export const TABLES = ['categories', 'groups', 'entries', 'recurring', 'meta', 'labels', 'budgets', 'goals'] as const
 export type TableName = (typeof TABLES)[number]
 
 // The in-memory database schedules its work with setImmediate. Safari has none,
@@ -147,6 +184,8 @@ db.version(2).stores({
   entries: 'id, date, [type+date], categoryId, recurringId, &recurringKey, *labels',
   labels: 'id',
 })
+
+db.version(3).stores({ budgets: 'id', goals: 'id' })
 
 /** Fixed ids of the two categories the parents switch looks at */
 export const PARENTS_EXPENSE = 'exp-eltern'

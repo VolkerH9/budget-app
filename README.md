@@ -51,6 +51,17 @@ Mit Labels markierst du Buchungen zusätzlich zu ihrer Kategorie, z. B. alles vo
 - **Für alle Buchungen eines Labels**: als Eltern-Kosten markieren oder die Markierung entfernen, Kategorie ändern, ein weiteres Label hinzufügen oder entfernen. Vorher siehst du, wie viele Buchungen betroffen sind, danach kannst du es rückgängig machen.
 - **Filter**: In den Einträgen nach Label filtern. Die CSV-Datei enthält eine Spalte „Labels“.
 
+## Budgets & Ziele
+
+Im Tab **Budgets**:
+
+- **Sparziele**: Name, Zielbetrag, Zieldatum, optional ein Startbetrag und welche Sparkategorien zählen. Der Ring zeigt den Fortschritt, dazu was noch fehlt, die nötige Monatsrate bis zum Zieldatum und ob du im Plan liegst (grün), dahinter (gelb) oder das Datum verpasst ist (rot).
+- **Monatsbudgets** für Kategorien und neu für ganze Überkategorien (z. B. „Essen & Alltag“ max. 400 € im Monat).
+- **Zeitraum-Budgets** für eine Kategorie oder Überkategorie pro Quartal, pro Jahr oder von–bis.
+- **Label-Budgets**: das Budget eines Labels (Einstellungen › Labels).
+- Gelb ab 80 %, rot bei Überschreitung. Ab dem 5. Tag eines Zeitraums kommt eine Prognose aus dem bisherigen Tempo, z. B. „Bei diesem Tempo überschreitest du das Budget am 24.11.“ oder „Voraussichtlich 120 € unter Budget“, bei Sparzielen „Bei deiner aktuellen Rate erreichst du das Ziel am …“.
+- Die Übersicht zeigt die dringendsten Budgets und bis zu zwei Sparziele kompakt.
+
 ## Überkategorien, Eltern-Kosten und Auswertung
 
 - **Überkategorien**: Einstellungen › Kategorien. Überkategorien anlegen, umbenennen, löschen; eine Kategorie verschiebst du, indem du sie antippst und eine andere Überkategorie wählst.
@@ -71,7 +82,7 @@ Mit Labels markierst du Buchungen zusätzlich zu ihrer Kategorie, z. B. alles vo
 
 ## Backup
 
-**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Labels, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Am eingestellten Tag jedes Monats (Standard: der 1.) erinnert die Übersicht an das Backup, ein Tipp startet es. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
+**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Labels, Budgets, Sparziele, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Am eingestellten Tag jedes Monats (Standard: der 1.) erinnert die Übersicht an das Backup, ein Tipp startet es. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
 
 **Auf einem neuen iPhone wiederherstellen**
 
