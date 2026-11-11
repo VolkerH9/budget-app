@@ -6,9 +6,11 @@ import { EntrySheet } from './components/EntrySheet'
 import { AssignSheet } from './components/ParentsCard'
 import { ReportSheet, type ReportKind } from './components/ReportSheet'
 import { LabelDetail } from './components/Labels'
+import { AffordSheet, type AffordDraft } from './components/AffordSheet'
+import { WrappedPlayer } from './components/Wrapped'
 import { Ctx, type AlertRequest, type AppContext, type SettingsPage, type Tab } from './context'
 import { bookDueEntries } from './lib/booking'
-import { monthOf, today } from './lib/dates'
+import { monthLabel, monthOf, today } from './lib/dates'
 import { saving } from './lib/vault'
 import { Overview } from './pages/Overview'
 import { Entries } from './pages/Entries'
@@ -40,13 +42,17 @@ function Booking({ onBooked }: { onBooked: (count: number) => void }) {
 export function App() {
   const [tab, setTab] = useState<Tab>('overview')
   const [month, setMonth] = useState(monthOf(today()))
-  const [sheet, setSheet] = useState<{ entry?: Entry } | null>(null)
+  const [sheet, setSheet] = useState<{ entry?: Entry; draft?: Partial<Entry>; key: number } | null>(null)
+  const [afford, setAfford] = useState<{ draft?: AffordDraft; key: number } | null>(null)
   const [toast, setToast] = useState<{ text: string; onUndo?: () => void; id: number } | null>(null)
   const [alert, setAlert] = useState<AlertRequest | null>(null)
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null)
   const [refund, setRefund] = useState<Entry | null>(null)
   const [report, setReport] = useState<{ month?: string; kind?: ReportKind } | null>(null)
   const [label, setLabel] = useState<string | null>(null)
+  const [statementTarget, setStatementTarget] = useState<string | null>(null)
+  const [wrapped, setWrapped] = useState<string | null>(null)
+  const clearStatementTarget = useCallback(() => setStatementTarget(null), [])
 
   /** A new repayment from the parents asks which monthly statement it pays */
   const onSaved = useCallback((saved: Entry, before?: Entry) => {
@@ -72,7 +78,8 @@ export function App() {
   const ctx = useMemo<AppContext>(() => ({
     month,
     setMonth,
-    openEntry: (entry) => setSheet({ entry }),
+    openEntry: (entry, draft) => setSheet({ entry, draft, key: Date.now() }),
+    openAfford: (draft) => setAfford({ draft, key: Date.now() }),
     deleteEntry: (entry) => {
       db.entries.delete(entry.id)
       showToast('Eintrag gelöscht', () => db.entries.put(entry))
@@ -88,7 +95,11 @@ export function App() {
     openReport: (options) => setReport(options ?? {}),
     openLabel: setLabel,
     openTab: setTab,
-  }), [month, showToast, settingsPage, clearSettingsPage])
+    openStatement: (key) => { setStatementTarget(key); setTab('analysis') },
+    statementTarget,
+    clearStatementTarget,
+    openWrapped: setWrapped,
+  }), [month, showToast, settingsPage, clearSettingsPage, statementTarget, clearStatementTarget])
 
   return (
     <Ctx.Provider value={ctx}>
@@ -109,9 +120,11 @@ export function App() {
                 </button>
               ))}
             </nav>
-            <button className="fab" aria-label="Neuer Eintrag" onClick={() => setSheet({})}><Icon name="plus" size={30} width={2.4} /></button>
+            <button className="fab" aria-label="Neuer Eintrag" onClick={() => setSheet({ key: Date.now() })}><Icon name="plus" size={30} width={2.4} /></button>
           </div>
-          {sheet && <EntrySheet entry={sheet.entry} onClose={() => setSheet(null)} onSaved={onSaved} />}
+          {sheet && <EntrySheet key={sheet.key} entry={sheet.entry} draft={sheet.draft} onClose={() => setSheet(null)} onSaved={onSaved} />}
+          {wrapped && <WrappedPlayer period={{ kind: wrapped.length === 4 ? 'year' : 'month', key: wrapped }} title={wrapped.length === 4 ? wrapped : monthLabel(wrapped)} onClose={() => setWrapped(null)} />}
+          {afford && <AffordSheet key={afford.key} draft={afford.draft} onClose={() => setAfford(null)} />}
           {refund && <AssignSheet refund={refund} onClose={closeRefund} />}
           {label && <LabelDetail id={label} onClose={() => setLabel(null)} />}
           {report && <ReportSheet month={report.month} kind={report.kind} onClose={() => setReport(null)} />}

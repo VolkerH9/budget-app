@@ -1,4 +1,4 @@
-import { db, getMeta, setMeta, type Category, type Entry, type Goal, type Group, type Label, type PeriodBudget, type Recurring } from '../db'
+import { db, getMeta, setMeta, type Category, type Entry, type Goal, type Group, type Label, type PeriodBudget, type Recurring, type Wish } from '../db'
 import { isValidIso, today } from './dates'
 import { expectSystemDialog } from './lockGuard'
 import { DATA_VERSION, migrateData } from './migrate'
@@ -9,6 +9,7 @@ interface Settings {
   saveThumbnails: boolean
   hideParents?: boolean
   reminderDays?: number
+  hourlyWage?: number | null
 }
 
 /** Where a photo lies in the encrypted part of a backup file */
@@ -34,6 +35,8 @@ export interface Backup {
   /** Since version 6 */
   budgets?: PeriodBudget[]
   goals?: Goal[]
+  /** Since version 7 */
+  wishes?: Wish[]
 }
 
 /** A backup file since version 4: everything inside `data` is encrypted, photos included. */
@@ -67,11 +70,13 @@ export async function createBackup(): Promise<Backup> {
     labels: await db.labels.toArray(),
     budgets: await db.budgets.toArray(),
     goals: await db.goals.toArray(),
+    wishes: await db.wishes.toArray(),
     settings: {
       savingsGoal: await getMeta<number | null>('savingsGoal', null),
       saveThumbnails: await getMeta('saveThumbnails', true),
       hideParents: await getMeta('hideParents', false),
       reminderDays: await getMeta('reminderDays', 7),
+      hourlyWage: await getMeta<number | null>('hourlyWage', null),
     },
   }
 }
@@ -208,7 +213,7 @@ export function parseBackup(text: string): Backup {
     throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
   }
   const listOk = (list: unknown) => list === undefined || (Array.isArray(list) && list.every((x) => typeof x?.id === 'string'))
-  if (!listOk(data.budgets) || !listOk(data.goals)) throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
+  if (!listOk(data.budgets) || !listOk(data.goals) || !listOk(data.wishes)) throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
   const labelsOk = (e: Entry) => e.labels === undefined || (Array.isArray(e.labels) && e.labels.every((id) => typeof id === 'string'))
   const photosOk = (e: Entry) => e.photos === undefined || (Array.isArray(e.photos) && e.photos.every((id) => typeof id === 'string'))
   const entriesOk = data.entries.every((e) => typeof e.id === 'string' && isType(e.type) && isCents(e.amount) && isValidIso(e.date) && categoryIds.has(e.categoryId) && photosOk(e) && labelsOk(e))
@@ -222,9 +227,10 @@ export function parseBackup(text: string): Backup {
 export async function restoreBackup(backup: Backup, photos: Photo[] = []): Promise<void> {
   // Photos first, so no restored entry points to a missing photo
   await savePhotos(photos)
-  const data = migrateData({ categories: backup.categories, groups: backup.groups ?? [], entries: backup.entries, recurring: backup.recurring, meta: [], labels: backup.labels ?? [], budgets: backup.budgets ?? [], goals: backup.goals ?? [] }, backup.version)
-  await db.transaction('rw', [db.categories, db.groups, db.entries, db.recurring, db.meta, db.labels, db.budgets, db.goals], async () => {
-    await Promise.all([db.categories.clear(), db.groups.clear(), db.entries.clear(), db.recurring.clear(), db.labels.clear(), db.budgets.clear(), db.goals.clear()])
+  const data = migrateData({ categories: backup.categories, groups: backup.groups ?? [], entries: backup.entries, recurring: backup.recurring, meta: [], labels: backup.labels ?? [], budgets: backup.budgets ?? [], goals: backup.goals ?? [], wishes: backup.wishes ?? [] }, backup.version)
+  await db.transaction('rw', [db.categories, db.groups, db.entries, db.recurring, db.meta, db.labels, db.budgets, db.goals, db.wishes], async () => {
+    await Promise.all([db.categories.clear(), db.groups.clear(), db.entries.clear(), db.recurring.clear(), db.labels.clear(), db.budgets.clear(), db.goals.clear(), db.wishes.clear()])
+    await db.wishes.bulkAdd(data.wishes)
     await db.labels.bulkAdd(data.labels)
     await db.budgets.bulkAdd(data.budgets)
     await db.goals.bulkAdd(data.goals)
@@ -236,6 +242,7 @@ export async function restoreBackup(backup: Backup, photos: Photo[] = []): Promi
     await setMeta('saveThumbnails', backup.settings?.saveThumbnails ?? true)
     await setMeta('hideParents', backup.settings?.hideParents ?? false)
     await setMeta('reminderDays', backup.settings?.reminderDays ?? 7)
+    await setMeta('hourlyWage', backup.settings?.hourlyWage ?? null)
   })
   // Photos of the replaced entries go once the new state is stored
   await whenSaved()
@@ -277,11 +284,15 @@ export type AskToShare = (share: () => void, cancel: () => void) => void
  * `askToShare` then shows a button that shares on that tap. Resolves to false when cancelled.
  */
 export async function saveFile(name: string, content: BlobPart, type: string, askToShare?: AskToShare): Promise<boolean> {
-  const file = new File([content], name, { type })
-  if (navigator.canShare?.({ files: [file] })) {
+  return saveFiles([new File([content], name, { type })], askToShare)
+}
+
+/** Several files in one share sheet, e.g. PDF and Excel for the shortcut "Budget ablegen" */
+export async function saveFiles(files: File[], askToShare?: AskToShare): Promise<boolean> {
+  if (navigator.canShare?.({ files })) {
     expectSystemDialog()
     try {
-      await navigator.share({ files: [file], title: name })
+      await navigator.share({ files })
       return true
     } catch (error) {
       if ((error as Error).name === 'AbortError') return false
@@ -289,18 +300,20 @@ export async function saveFile(name: string, content: BlobPart, type: string, as
       if (askToShare) {
         return new Promise<boolean>((resolve) => askToShare(() => {
           expectSystemDialog()
-          navigator.share({ files: [file], title: name }).then(() => resolve(true), () => resolve(false))
+          navigator.share({ files }).then(() => resolve(true), () => resolve(false))
         }, () => resolve(false)))
       }
-      // Share sheet not allowed here: save as a download instead
+      // Share sheet not allowed here: save as downloads instead
     }
   }
-  const url = URL.createObjectURL(file)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  for (const file of files) {
+    const url = URL.createObjectURL(file)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = file.name
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
   return true
 }
 

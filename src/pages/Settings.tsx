@@ -13,7 +13,7 @@ import { expectSystemDialog } from '../lib/lockGuard'
 import { hasSampleData, loadSampleData, removeSampleData } from '../lib/sample'
 import { totals } from '../lib/subscriptions'
 import { setTheme, useTheme, type Theme } from '../lib/theme'
-import { formatEuro } from '../lib/format'
+import { amountToInput, formatEuro, parseAmount } from '../lib/format'
 import { CategoriesPage } from './CategoriesPage'
 import { RecurringPage } from './RecurringPage'
 import { SecurityPage } from './SecurityPage'
@@ -106,6 +106,26 @@ function GoalSheet({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** Hourly wage, so "Kann ich mir das leisten?" can say how many hours of work a purchase is */
+function WageSheet({ onClose }: { onClose: () => void }) {
+  const wage = useMeta<number | null>('hourlyWage', null)
+  const [text, setText] = useState('')
+  useEffect(() => setText(wage === null ? '' : amountToInput(wage)), [wage])
+  const cents = text.trim() ? parseAmount(text) : null
+  const valid = text.trim() === '' || cents !== null
+  return (
+    <Sheet title="Stundenlohn" onClose={onClose} action={{ label: 'Sichern', disabled: !valid, onClick: async () => { await setMeta('hourlyWage', cents); onClose() } }}>
+      <div className="group">
+        <label className="row">
+          <span className="row-main">Netto pro Stunde in €</span>
+          <input type="text" inputMode="decimal" placeholder="z. B. 14" aria-label="Stundenlohn" value={text} onChange={(e) => setText(e.target.value)} autoFocus />
+        </label>
+      </div>
+      <p className="section-foot">„Kann ich mir das leisten?“ zeigt damit, wie viele Arbeitsstunden ein Kauf kostet. Leer lassen zum Ausschalten.</p>
+    </Sheet>
+  )
+}
+
 export function Settings() {
   const { alert, toast, settingsPage, clearSettingsPage, openReport, openLabel } = useApp()
   const labelCount = useLiveQuery(() => db.labels.filter((l) => !l.archived).count(), [], 0)
@@ -113,6 +133,8 @@ export function Settings() {
   const groups = useGroups()
   const [sub, setSub] = useState<Sub>(settingsPage)
   const [goalOpen, setGoalOpen] = useState(false)
+  const [wageOpen, setWageOpen] = useState(false)
+  const wage = useMeta<number | null>('hourlyWage', null)
   const [persisted, setPersisted] = useState<boolean | null>(null)
   const goal = useMeta<number | null>('savingsGoal', null)
   const apiKey = useMeta('apiKey', '')
@@ -173,6 +195,7 @@ export function Settings() {
         <NavRow label="Abos" value={`${formatEuro(totals(subscriptions).month)} / Monat`} onClick={() => setSub('subscriptions')} />
         <NavRow label="Daueraufträge" value={String(standing)} onClick={() => setSub('recurring')} />
         <NavRow label="Sparziel" value={goal === null ? 'Aus' : `${goal} %`} onClick={() => setGoalOpen(true)} />
+        <NavRow label="Stundenlohn" value={wage === null ? 'Aus' : `${formatEuro(wage)} / Std.`} onClick={() => setWageOpen(true)} />
       </div>
 
       <h2 className="section-title">App</h2>
@@ -245,6 +268,7 @@ export function Settings() {
       {persisted === false && <p className="section-foot">iOS bestätigt den dauerhaften Speicher erst, wenn die App auf dem Home-Bildschirm liegt. Sichere trotzdem regelmäßig ein Backup.</p>}
 
       {goalOpen && <GoalSheet onClose={() => setGoalOpen(false)} />}
+      {wageOpen && <WageSheet onClose={() => setWageOpen(false)} />}
     </main>
   )
 }

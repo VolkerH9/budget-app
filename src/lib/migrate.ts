@@ -1,8 +1,8 @@
-import { DEFAULT_CATEGORIES, DEFAULT_GROUPS, newId, SUBSCRIPTION_CATEGORY, type Category, type Entry, type EntryType, type Goal, type Group, type Label, type Meta, type PeriodBudget, type Recurring } from '../db'
+import { DEFAULT_CATEGORIES, DEFAULT_GROUPS, newId, SUBSCRIPTION_CATEGORY, type Category, type Entry, type EntryType, type Goal, type Group, type Label, type Meta, type PeriodBudget, type Recurring, type Wish } from '../db'
 import { today } from './dates'
 
 /** Version of the stored data layout. Raise it together with a new step in `migrateData`. */
-export const DATA_VERSION = 6
+export const DATA_VERSION = 7
 
 export interface DataSet {
   categories: Category[]
@@ -15,6 +15,8 @@ export interface DataSet {
   /** Since version 6 */
   budgets: PeriodBudget[]
   goals: Goal[]
+  /** Since version 7 */
+  wishes: Wish[]
 }
 
 /** "Food & Restaurants" became two categories. Existing entries stay in Food. */
@@ -92,8 +94,8 @@ export const renameLeisure = (categories: Category[]): Category[] =>
 
 /** Brings data of an older version up to date. Entries keep their ids and categories. */
 export function migrateData(data: DataSet, from: number, now = today()): DataSet {
-  // Labels came with version 5, period budgets and savings goals with 6; older data has none
-  let result: DataSet = { ...data, labels: data.labels ?? [], budgets: data.budgets ?? [], goals: data.goals ?? [] }
+  // Labels came with version 5, period budgets and savings goals with 6, the wish list with 7; older data has none
+  let result: DataSet = { ...data, labels: data.labels ?? [], budgets: data.budgets ?? [], goals: data.goals ?? [], wishes: data.wishes ?? [] }
   if (from < 2) result = { ...result, categories: splitFoodCategory(result.categories) }
   if (from < 3) result = toVersion3(result, now)
   if (from < 4) result = { ...result, categories: renameLeisure(result.categories) }
@@ -103,5 +105,5 @@ export function migrateData(data: DataSet, from: number, now = today()): DataSet
 /** Data of a fresh installation */
 export function freshData(now = today()): DataSet {
   const categories = DEFAULT_CATEGORIES.map((c) => ({ ...c, symbol: 'icon' as const }))
-  return { categories, groups: [...DEFAULT_GROUPS], entries: [], recurring: defaultSubscriptions(categories, now), meta: [], labels: [], budgets: [], goals: [] }
+  return { categories, groups: [...DEFAULT_GROUPS], entries: [], recurring: defaultSubscriptions(categories, now), meta: [], labels: [], budgets: [], goals: [], wishes: [] }
 }

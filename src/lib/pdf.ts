@@ -1,9 +1,9 @@
 import type { jsPDF as JsPdf } from 'jspdf'
-import type { Category, Entry, EntryType, Group } from '../db'
-import { formatDate, monthLabel } from './dates'
+import type { Category, Entry, EntryType, Group, Label } from '../db'
+import { formatDate, monthLabel, monthShort } from './dates'
 import { formatEuro, formatPercent } from './format'
 import { STATUS_LABEL, type Statement } from './parents'
-import { summarize } from './stats'
+import type { Comparison, Statement as PeriodStatement } from './statement'
 import { loadPhoto } from './vault'
 
 // A4 in millimetres
@@ -20,6 +20,10 @@ const LINE: Rgb = [222, 222, 228]
 const TINT: Rgb = [51, 104, 201]
 const TINT_SOFT: Rgb = [232, 239, 250]
 const ZEBRA: Rgb = [247, 247, 249]
+const RED: Rgb = [196, 55, 45]
+const AMBER: Rgb = [168, 90, 6]
+const GREEN: Rgb = [42, 131, 80]
+const EXPENSE: Rgb = [200, 111, 48]
 
 type Rgb = [number, number, number]
 
@@ -193,6 +197,67 @@ class Writer {
     this.y += lines.length * 4.5 + 3
   }
 
+  /** Grouped bar chart, e.g. income and expenses per month */
+  bars(rows: { label: string; a: number; b: number }[], names: [string, string]) {
+    const height = 46
+    this.need(height + 16)
+    const top = this.y + 4
+    const max = Math.max(1, ...rows.flatMap((r) => [r.a, r.b]))
+    const slot = WIDTH / rows.length
+    const bar = Math.min(5, slot / 3)
+    this.doc.setDrawColor(...LINE)
+    this.doc.setLineWidth(0.2)
+    for (let i = 0; i <= 4; i++) this.doc.line(MARGIN, top + (height * i) / 4, MARGIN + WIDTH, top + (height * i) / 4)
+    rows.forEach((r, i) => {
+      const x = MARGIN + i * slot + slot / 2
+      const ha = (r.a / max) * height
+      const hb = (r.b / max) * height
+      this.doc.setFillColor(...TINT)
+      if (ha > 0) this.doc.roundedRect(x - bar - 0.4, top + height - ha, bar, ha, 0.8, 0.8, 'F')
+      this.doc.setFillColor(...EXPENSE)
+      if (hb > 0) this.doc.roundedRect(x + 0.4, top + height - hb, bar, hb, 0.8, 0.8, 'F')
+      this.font(7.5, 'normal', MUTED)
+      this.text(r.label, x, top + height + 4.5, { align: 'center' })
+    })
+    this.font(7.5, 'normal', MUTED)
+    this.text(euro(max), MARGIN, top - 1.2)
+    const legend = top + height + 10
+    this.doc.setFillColor(...TINT)
+    this.doc.rect(MARGIN, legend - 2.5, 3, 3, 'F')
+    this.text(names[0], MARGIN + 4.5, legend)
+    this.doc.setFillColor(...EXPENSE)
+    this.doc.rect(MARGIN + 30, legend - 2.5, 3, 3, 'F')
+    this.text(names[1], MARGIN + 34.5, legend)
+    this.y = legend + 5
+  }
+
+  /** One stacked bar with the share of each part, and a small legend below */
+  shares(parts: { label: string; amount: number; share: number; color: string }[]) {
+    this.need(22)
+    let x = MARGIN
+    const rgb = (hex: string): Rgb => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
+    for (const p of parts) {
+      const width = p.share * WIDTH
+      if (width <= 0) continue
+      this.doc.setFillColor(...rgb(p.color))
+      this.doc.rect(x, this.y, Math.max(0.3, width - 0.4), 6, 'F')
+      x += width
+    }
+    this.y += 9
+    let lx = MARGIN
+    this.font(7.5, 'normal', MUTED)
+    for (const p of parts.slice(0, 8)) {
+      const text = `${pdfText(p.label)} ${Math.round(p.share * 100)} %`
+      const width = this.doc.getTextWidth(text) + 8
+      if (lx + width > MARGIN + WIDTH) { lx = MARGIN; this.y += 4.5 }
+      this.doc.setFillColor(...rgb(p.color))
+      this.doc.rect(lx, this.y - 2.4, 2.8, 2.8, 'F')
+      this.text(text, lx + 4, this.y)
+      lx += width
+    }
+    this.y += 5
+  }
+
   /** Page numbers and the report name at the bottom of every page */
   footers() {
     const total = this.doc.getNumberOfPages()
@@ -326,38 +391,25 @@ export async function parentsReport(
 
 const TYPE_TITLES: [EntryType, string][] = [['income', 'Einnahmen'], ['expense', 'Ausgaben'], ['saving', 'Sparen']]
 
-/** Everything of a month, by overcategory and category, with sums and the savings rate. */
-export async function monthReport(
-  month: string,
-  entries: Entry[],
-  categories: Category[],
-  groups: Group[],
-  options: ReportOptions & { photos: boolean; hiddenParents: boolean },
-  onProgress?: (done: number, total: number) => void,
-): Promise<Blob> {
-  const title = `Monatsbericht ${monthLabel(month)}`
-  const doc = await createDoc()
-  doc.setProperties({ title, author: options.name, creator: 'Budget' })
-  const w = new Writer(doc, title)
-  w.title(title, options)
+const signed = (cents: number) => `${cents < 0 ? '-' : ''}${euro(Math.abs(cents))}`
 
-  const sum = summarize(entries)
-  w.tiles([
-    ['Einnahmen', euro(sum.income)],
-    ['Ausgaben', euro(sum.expense)],
-    ['Gespart', euro(sum.saving)],
-    ['Rest', `${sum.rest < 0 ? '-' : ''}${euro(Math.abs(sum.rest))}`],
-    ['Sparquote', sum.savingsRate === null ? '–' : pdfText(formatPercent(sum.savingsRate))],
-  ])
-  if (options.hiddenParents) w.note('„Eltern“ und „Kostenrückzahlung Eltern“ sind ausgeblendet, wie in der App eingestellt.')
+/** "+12,30 € (+8 %)" against the previous period */
+function changeText(c: Comparison, percent = false): string {
+  if (c.current === 0 && c.previous === 0) return '–'
+  if (c.diff === 0) return '± 0'
+  const sign = c.diff > 0 ? '+' : '-'
+  if (percent) return `${sign}${String(Math.round(Math.abs(c.diff) * 1000) / 10).replace('.', ',')} Pkt.`
+  return `${sign}${euro(Math.abs(c.diff))}${c.ratio !== null ? ` (${sign}${Math.round(Math.abs(c.ratio) * 100)} %)` : ''}`
+}
 
-  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt)
-  const { pages, labels } = numberPhotos(options.photos ? sorted : [])
+/** All entries of the period, by type, overcategory and category, with the photo numbers */
+function listEntries(w: Writer, entries: Entry[], categories: Category[], groups: Group[], labels: Map<string, string>) {
   const columns: Column[] = [
     { label: 'Datum', width: 24 },
     { label: 'Beschreibung', width: WIDTH - 24 - 32 },
     { label: 'Betrag', width: 32, align: 'right' },
   ]
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt)
   const byCategory = (c: Category) => sorted.filter((e) => e.categoryId === c.id)
   const total = (list: Entry[]) => list.reduce((s, e) => s + e.amount, 0)
 
@@ -415,6 +467,130 @@ export async function monthReport(
     }
   }
   if (sorted.length === 0) w.note('In diesem Monat gibt es keine Buchungen.')
+
+}
+
+export interface StatementReportOptions extends ReportOptions {
+  categories: Category[]
+  groups: Group[]
+  labels: Label[]
+  photos: boolean
+  hiddenParents?: boolean
+}
+
+/**
+ * The monthly or yearly statement: key figures with the comparison, the year's course,
+ * spending by area, budgets and goals, labels, the largest expenses, Abos, parents costs,
+ * then every entry and, if wanted, the receipts.
+ */
+export async function statementReport(s: PeriodStatement, options: StatementReportOptions, onProgress?: (done: number, total: number) => void): Promise<Blob> {
+  const yearly = s.period.kind === 'year'
+  const title = yearly ? `Jahresabrechnung ${s.period.key}` : `Monatsabrechnung ${monthLabel(s.period.key)}`
+  const prevName = yearly ? String(Number(s.period.key) - 1) : 'Vormonat'
+  const doc = await createDoc()
+  doc.setProperties({ title, author: options.name, creator: 'Budget' })
+  const w = new Writer(doc, title)
+  w.title(title, options)
+
+  const sum = s.summary
+  w.tiles([
+    ['Einnahmen', euro(sum.income)],
+    ['Ausgaben', euro(sum.expense)],
+    ['Gespart', euro(sum.saving)],
+    ['Rest', signed(sum.rest)],
+    ['Sparquote', sum.savingsRate === null ? '–' : pdfText(formatPercent(sum.savingsRate))],
+  ])
+  const kpi: Column[] = [{ label: 'Kennzahl', width: 50 }, { label: 'Betrag', width: 40, align: 'right' }, { label: prevName, width: 40, align: 'right' }, { label: 'Veränderung', width: WIDTH - 130, align: 'right' }]
+  w.tableHead(kpi)
+  const c = s.comparison
+  w.row(kpi, ['Einnahmen', euro(sum.income), euro(s.previous.income), changeText(c.income)])
+  w.row(kpi, ['Ausgaben', euro(sum.expense), euro(s.previous.expense), changeText(c.expense)], { zebra: true })
+  w.row(kpi, ['Gespart', euro(sum.saving), euro(s.previous.saving), changeText(c.saving)])
+  w.row(kpi, ['Rest', signed(sum.rest), signed(s.previous.rest), changeText(c.rest)], { zebra: true })
+  w.row(kpi, ['Sparquote', pdfText(formatPercent(sum.savingsRate ?? 0)), pdfText(formatPercent(s.previous.savingsRate ?? 0)), changeText(c.savingsRate, true)])
+  if (options.hiddenParents) w.note('„Eltern“ und „Kostenrückzahlung Eltern“ sind ausgeblendet, wie in der App eingestellt.')
+
+  if (s.months) {
+    w.y += 4
+    w.heading(`Verlauf ${s.period.key}`)
+    w.bars(s.months.map((m) => ({ label: monthShort(m.month), a: m.income, b: m.expense })), ['Einnahmen', 'Ausgaben'])
+    const avg: Column[] = [{ label: '', width: 70 }, { label: '', width: WIDTH - 70, align: 'right' }]
+    w.row(avg, ['Durchschnittliche Ausgaben pro Monat', euro(s.averageExpense ?? 0)])
+    if (s.dearest) w.row(avg, ['Teuerster Monat', `${monthLabel(s.dearest.month)} · ${euro(s.dearest.expense)}`], { zebra: true })
+    if (s.cheapest) w.row(avg, ['Günstigster Monat', `${monthLabel(s.cheapest.month)} · ${euro(s.cheapest.expense)}`])
+  }
+
+  if (s.groups.length > 0) {
+    w.y += 4
+    w.heading('Ausgaben nach Bereichen')
+    w.shares(s.groups.map((g) => ({ label: g.label, amount: g.amount, share: g.share, color: g.color })))
+    const cols: Column[] = [{ label: 'Bereich / Kategorie', width: 66 }, { label: 'Anteil', width: 20, align: 'right' }, { label: 'Anz.', width: 14, align: 'right' }, { label: 'Betrag', width: 30, align: 'right' }, { label: `zu ${prevName}`, width: WIDTH - 130, align: 'right' }]
+    w.tableHead(cols)
+    for (const g of s.groups) {
+      w.row(cols, [g.label, pdfText(formatPercent(g.share)), String(g.count), euro(g.amount), changeText({ current: g.amount, previous: g.previous, diff: g.amount - g.previous, ratio: g.previous ? (g.amount - g.previous) / g.previous : null })], { bold: true })
+      if (g.lines.length > 1) for (const l of g.lines) w.row(cols, [`    ${l.category.name}`, pdfText(formatPercent(l.share)), String(l.count), euro(l.amount), changeText({ current: l.amount, previous: l.previous, diff: l.amount - l.previous, ratio: l.previous ? (l.amount - l.previous) / l.previous : null })], { rgb: [MUTED, MUTED, MUTED, INK, MUTED] })
+    }
+  }
+
+  if (s.budgets.length > 0 || s.goals.length > 0) {
+    w.y += 4
+    w.heading('Budgets & Ziele')
+    const cols: Column[] = [{ label: 'Budget', width: 62 }, { label: 'Ausgegeben', width: 30, align: 'right' }, { label: 'Budget', width: 30, align: 'right' }, { label: 'Stand', width: WIDTH - 122, align: 'right' }]
+    if (s.budgets.length > 0) w.tableHead(cols)
+    s.budgets.forEach((b, i) => {
+      const state = b.kept ? `${b.kept.months} von ${b.kept.of} Monaten eingehalten` : b.progress.level === 'over' ? `${euro(-b.progress.rest)} drüber` : `${Math.round(b.progress.ratio * 100)} % · ${euro(b.progress.rest)} übrig`
+      w.row(cols, [`${b.name} (${b.kind === 'group' ? 'Überkategorie' : b.kind === 'period' ? 'Zeitraum' : b.kind === 'label' ? 'Label' : 'Kategorie'})`, euro(b.progress.spent), euro(b.progress.budget), state], {
+        zebra: i % 2 === 1, rgb: [INK, INK, INK, b.progress.level === 'over' ? RED : b.progress.level === 'warn' ? AMBER : MUTED],
+      })
+    })
+    if (s.goals.length > 0) {
+      const gcols: Column[] = [{ label: 'Sparziel', width: 62 }, { label: 'Gespart', width: 30, align: 'right' }, { label: 'Ziel', width: 30, align: 'right' }, { label: 'Stand', width: WIDTH - 122, align: 'right' }]
+      w.y += 2
+      w.tableHead(gcols)
+      s.goals.forEach(({ goal, progress }, i) => w.row(gcols, [`${goal.name} bis ${formatDate(goal.due)}`, euro(progress.saved), euro(goal.target), progress.reached ? 'erreicht' : progress.onTrack ? 'im Plan' : progress.overdue ? 'verpasst' : 'hinter dem Plan'], {
+        zebra: i % 2 === 1, rgb: [INK, INK, INK, progress.level === 'over' ? RED : progress.level === 'warn' ? AMBER : GREEN],
+      }))
+    }
+  }
+
+  if (s.labels.length > 0) {
+    w.y += 4
+    w.heading('Labels')
+    const cols: Column[] = [{ label: 'Label', width: WIDTH - 70 }, { label: 'Buchungen', width: 30, align: 'right' }, { label: 'Summe', width: 40, align: 'right' }]
+    w.tableHead(cols)
+    s.labels.forEach((l, i) => w.row(cols, [l.label.name, String(l.count), euro(l.amount)], { zebra: i % 2 === 1 }))
+  }
+
+  if (s.top.length > 0) {
+    w.y += 4
+    w.heading('Größte Ausgaben')
+    const cols: Column[] = [{ label: '#', width: 8 }, { label: 'Datum', width: 24 }, { label: 'Beschreibung', width: WIDTH - 8 - 24 - 46 - 30 }, { label: 'Kategorie', width: 46 }, { label: 'Betrag', width: 30, align: 'right' }]
+    w.tableHead(cols)
+    s.top.forEach((e, i) => w.row(cols, [String(i + 1), formatDate(e.date), describe(e), options.categories.find((x) => x.id === e.categoryId)?.name ?? '', euro(e.amount)], { zebra: i % 2 === 1 }))
+  }
+
+  const recurring = [...s.subscriptions.map((l) => ({ ...l, tag: 'Abo' })), ...s.standing.map((l) => ({ ...l, tag: 'Dauerauftrag' }))]
+  if (recurring.length > 0) {
+    w.y += 4
+    w.heading('Abos und Daueraufträge')
+    const cols: Column[] = [{ label: 'Name', width: WIDTH - 90 }, { label: 'Art', width: 36 }, { label: 'Anzahl', width: 20, align: 'right' }, { label: 'Summe', width: 34, align: 'right' }]
+    w.tableHead(cols)
+    recurring.forEach((l, i) => w.row(cols, [l.recurring.name, l.tag, String(l.count), euro(l.amount)], { zebra: i % 2 === 1 }))
+  }
+
+  if (s.parents.spent > 0 || s.parents.refunded > 0) {
+    w.y += 4
+    w.heading('Eltern-Kosten')
+    w.line(`Ausgaben (${s.parents.count})`, euro(s.parents.spent))
+    w.line('Rückzahlungen', euro(s.parents.refunded))
+    w.line(`Offen am ${formatDate(s.to)}`, signed(s.parents.openAtEnd), { bold: true })
+  }
+
+  const sorted = [...s.entries]
+  const { pages, labels } = numberPhotos(options.photos ? sorted : [])
+  w.newPage()
+  w.heading('Alle Buchungen')
+  listEntries(w, sorted, options.categories, options.groups, labels)
 
   await appendPhotos(w, pages, onProgress)
   w.footers()

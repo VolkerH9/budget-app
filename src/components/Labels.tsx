@@ -21,10 +21,10 @@ export function LabelGlyph({ label, size = 15 }: { label: Pick<Label, 'emoji' | 
   return Glyph ? <Glyph size={size} strokeWidth={2} aria-hidden="true" /> : <span aria-hidden="true" style={{ fontSize: size }}>{label.emoji}</span>
 }
 
-/** Coloured chip; pressed chips are filled more strongly */
-export function LabelChip({ label, pressed, onClick, small }: { label: Label; pressed?: boolean; onClick?: () => void; small?: boolean }) {
+/** Coloured chip; pressed chips are filled more strongly, crossed ones were taken off an entry */
+export function LabelChip({ label, pressed, onClick, small, crossed }: { label: Label; pressed?: boolean; onClick?: () => void; small?: boolean; crossed?: boolean }) {
   const style = { '--c': label.color } as React.CSSProperties
-  const className = `label-chip${small ? ' small' : ''}${pressed === false ? ' off' : ''}`
+  const className = `label-chip${small ? ' small' : ''}${crossed ? ' off' : ''}`
   const content = <><LabelGlyph label={label} size={small ? 12 : 15} /><span>{label.name}</span></>
   return onClick
     ? <button type="button" className={className} style={style} aria-pressed={pressed} onClick={onClick}>{content}{pressed && <X size={13} strokeWidth={2.4} aria-hidden="true" />}</button>

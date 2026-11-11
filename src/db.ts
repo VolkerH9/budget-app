@@ -138,6 +138,21 @@ export interface Goal {
   createdAt: number
 }
 
+/** A purchase put on the wish list by "Kann ich mir das leisten?" */
+export interface Wish {
+  id: string
+  name: string
+  /** In cents */
+  amount: number
+  categoryId: string
+  labelId?: string
+  /** Month planned for, 'YYYY-MM'; empty means now */
+  month?: string
+  /** Paid over this many months */
+  spread?: number
+  createdAt: number
+}
+
 export interface Meta {
   key: string
   value: unknown
@@ -152,9 +167,10 @@ export type Tables = {
   labels: EntityTable<Label, 'id'>
   budgets: EntityTable<PeriodBudget, 'id'>
   goals: EntityTable<Goal, 'id'>
+  wishes: EntityTable<Wish, 'id'>
 }
 
-export const TABLES = ['categories', 'groups', 'entries', 'recurring', 'meta', 'labels', 'budgets', 'goals'] as const
+export const TABLES = ['categories', 'groups', 'entries', 'recurring', 'meta', 'labels', 'budgets', 'goals', 'wishes'] as const
 export type TableName = (typeof TABLES)[number]
 
 // The in-memory database schedules its work with setImmediate. Safari has none,
@@ -186,6 +202,8 @@ db.version(2).stores({
 })
 
 db.version(3).stores({ budgets: 'id', goals: 'id' })
+
+db.version(4).stores({ wishes: 'id' })
 
 /** Fixed ids of the two categories the parents switch looks at */
 export const PARENTS_EXPENSE = 'exp-eltern'

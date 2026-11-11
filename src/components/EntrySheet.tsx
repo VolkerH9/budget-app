@@ -21,7 +21,7 @@ import { CategoryIcon } from './CategoryIcon'
 export const TYPE_OPTIONS: [EntryType, string][] = [['expense', 'Ausgabe'], ['saving', 'Sparen'], ['income', 'Einnahme']]
 
 /** Categories of one type, most recently used first. */
-function useSortedCategories(type: EntryType): Category[] {
+export function useSortedCategories(type: EntryType): Category[] {
   const categories = useCategories()
   const recent = useLiveQuery(async () => {
     const latest = await db.entries.orderBy('date').reverse().limit(200).toArray()
@@ -113,20 +113,21 @@ function PhotoRow({ photos, onChange, busy }: { photos: PhotoSource[]; onChange:
   )
 }
 
-export function EntrySheet({ entry, onClose, onSaved }: { entry?: Entry; onClose: () => void; onSaved?: (entry: Entry, before?: Entry) => void }) {
-  const { toast, alert } = useApp()
-  const [type, setType] = useState<EntryType>(entry?.type ?? 'expense')
-  const [amount, setAmount] = useState(entry ? amountToInput(entry.amount) : '')
-  const [categoryId, setCategoryId] = useState(entry?.categoryId ?? '')
-  const [date, setDate] = useState(entry?.date ?? today())
-  const [note, setNote] = useState(entry?.note ?? '')
+export function EntrySheet({ entry, draft, onClose, onSaved }: { entry?: Entry; draft?: Partial<Entry>; onClose: () => void; onSaved?: (entry: Entry, before?: Entry) => void }) {
+  const { toast, alert, openAfford } = useApp()
+  const start = entry ?? draft
+  const [type, setType] = useState<EntryType>(start?.type ?? 'expense')
+  const [amount, setAmount] = useState(start?.amount ? amountToInput(start.amount) : '')
+  const [categoryId, setCategoryId] = useState(start?.categoryId ?? '')
+  const [date, setDate] = useState(start?.date ?? today())
+  const [note, setNote] = useState(start?.note ?? '')
   const [merchant, setMerchant] = useState(entry?.merchant ?? '')
   const thumbnail = entry?.thumbnail
   const [refunded, setRefunded] = useState(entry?.refunded ?? false)
   const [forParents, setForParents] = useState(entry?.forParents ?? false)
   const allLabels = useLabels()
   // New entries get the labels whose period contains their date; taking one off counts for this entry only
-  const [added, setAdded] = useState<string[]>(entry?.labels ?? [])
+  const [added, setAdded] = useState<string[]>(start?.labels ?? [])
   const [removed, setRemoved] = useState<string[]>([])
   const [pickingLabels, setPickingLabels] = useState(false)
   const auto = entry ? [] : autoLabels(allLabels, date)
@@ -252,6 +253,11 @@ export function EntrySheet({ entry, onClose, onSaved }: { entry?: Entry; onClose
       action={{ label: 'Sichern', onClick: save, disabled: !valid }}
     >
       <Segmented value={type} options={TYPE_OPTIONS} onChange={changeType} />
+      {!entry && type === 'expense' && (
+        <button className="afford-link" onClick={() => openAfford({ amount: cents ?? undefined, categoryId: categoryId || undefined, name: note.trim() || undefined })}>
+          Kann ich mir das leisten?
+        </button>
+      )}
       <AmountDisplay text={amount} />
 
       <div className="cat-strip" role="group" aria-label="Kategorie">
@@ -281,7 +287,7 @@ export function EntrySheet({ entry, onClose, onSaved }: { entry?: Entry; onClose
       </div>
 
       <div className="label-row" role="group" aria-label="Labels">
-        {shownLabels.map((l) => <LabelChip key={l.id} label={l} pressed={labels.includes(l.id)} onClick={() => { haptic(); toggleLabel(l.id) }} />)}
+        {shownLabels.map((l) => <LabelChip key={l.id} label={l} pressed={labels.includes(l.id)} crossed={!labels.includes(l.id)} onClick={() => { haptic(); toggleLabel(l.id) }} />)}
         <button type="button" className="label-chip add" onClick={() => setPickingLabels(true)}><Tag size={14} strokeWidth={2} aria-hidden="true" /> {shownLabels.length > 0 ? 'Labels' : 'Label'}</button>
       </div>
 

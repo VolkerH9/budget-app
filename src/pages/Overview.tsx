@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Archive, BellRing, FileText, X } from 'lucide-react'
+import { Archive, BellRing, FileText, Scale, Sparkles, X } from 'lucide-react'
 import { db, isParentsEntry, setMeta, type Entry } from '../db'
 import { useApp, useCategories, useGroups, useLabels, useMeta, useRangeEntries } from '../context'
 import { LabelGlyph } from '../components/Labels'
@@ -15,6 +15,8 @@ import { useBackupExport } from '../components/BackupExport'
 import { REPORT_DONE } from '../components/ReportSheet'
 import { statements } from '../lib/parents'
 import { backupState, parentsReportDue } from '../lib/reminders'
+import { finishedPeriods, periodRange } from '../lib/statement'
+import { hasWrapped } from '../lib/wrapped'
 import { addMonths, formatTime, monthLabel, monthShort, today } from '../lib/dates'
 import { formatEuro, formatPercent } from '../lib/format'
 import { reminders } from '../lib/subscriptions'
@@ -160,6 +162,59 @@ function BackupHint() {
 
 const noop = () => {}
 
+function AffordButton() {
+  const { openAfford } = useApp()
+  const wishes = useLiveQuery(() => db.wishes.count(), [], 0)
+  return (
+    <button className="card afford-card" onClick={() => openAfford()}>
+      <Scale size={22} strokeWidth={1.8} aria-hidden="true" />
+      <span className="row-main">
+        <b>Kann ich mir das leisten?</b>
+        <span className="row-sub" style={{ display: 'block' }}>{wishes > 0 ? `${wishes} ${wishes === 1 ? 'Wunsch' : 'Wünsche'} auf der Wunschliste` : 'Kauf prüfen, bevor du buchst'}</span>
+      </span>
+      <span className="chevron" aria-hidden="true">›</span>
+    </button>
+  )
+}
+
+/** After a month or year ends: its statement is ready, until it was exported or the hint dismissed */
+function StatementHint() {
+  const { openStatement, openWrapped } = useApp()
+  const seen = useMeta<string[]>('wrappedSeen', [])
+  const entries = useLiveQuery(() => db.entries.toArray(), [], [] as Entry[])
+  const done = useMeta<string[]>('statementsDone', [])
+  const dismissed = useMeta<string[]>('statementsDismissed', [])
+  const first = useLiveQuery(() => db.entries.orderBy('date').first(), [])
+  const due = finishedPeriods(today()).filter((p) => !done.includes(p.key) && !dismissed.includes(p.key) && !!first && first.date <= periodRange(p)[1])
+  return (
+    <>
+      {due.map((p) => {
+        const name = p.kind === 'month' ? monthLabel(p.key).split(' ')[0] : p.key
+        return (
+          <div key={p.key} className="card reminder">
+            <FileText size={20} strokeWidth={1.8} aria-hidden="true" />
+            <button className="row-main" style={{ textAlign: 'left' }} onClick={() => openStatement(p.key)}>
+              <b>Deine Abrechnung für {name} ist fertig</b>
+              <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>Jetzt exportieren und ablegen</span>
+            </button>
+            <button className="icon-btn" aria-label="Hinweis ausblenden" onClick={() => setMeta('statementsDismissed', [...dismissed, p.key].slice(-60))}><X size={18} /></button>
+          </div>
+        )
+      })}
+      {finishedPeriods(today()).filter((p) => !seen.includes(p.key) && !dismissed.includes(`wrapped:${p.key}`) && hasWrapped(entries, p)).map((p) => (
+        <div key={`w-${p.key}`} className="card reminder wrapped-hint">
+          <Sparkles size={20} strokeWidth={1.8} aria-hidden="true" />
+          <button className="row-main" style={{ textAlign: 'left' }} onClick={() => openWrapped(p.key)}>
+            <b>Dein {p.kind === 'month' ? `${monthLabel(p.key).split(' ')[0]}-Rückblick` : `Jahresrückblick ${p.key}`} ist da</b>
+            <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>Zum Durchtippen, wie eine Story</span>
+          </button>
+          <button className="icon-btn" aria-label="Hinweis ausblenden" onClick={() => setMeta('statementsDismissed', [...dismissed, `wrapped:${p.key}`].slice(-60))}><X size={18} /></button>
+        </div>
+      ))}
+    </>
+  )
+}
+
 /** The most pressing budgets and goals, compact; the rest is on the Budgets tab */
 function TopBudgets({ month }: { month: string }) {
   const { openTab } = useApp()
@@ -304,8 +359,10 @@ export function Overview() {
       </div>
 
       <div className="stack">
+        <AffordButton />
         <SavingsCard saving={summary.saving} income={summary.income} rate={summary.savingsRate} goal={goal} />
         <Reminders />
+        <StatementHint />
         <BackupHint />
         <ParentsReportHint parents={parents} />
         <ParentsCard entries={parents} />

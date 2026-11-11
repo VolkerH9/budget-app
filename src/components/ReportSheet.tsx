@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, newId, PARENTS_REFUND, setMeta, type Entry } from '../db'
-import { useApp, useAskToShare, useCategories, useGroups, useMeta, useRangeEntries } from '../context'
+import { useApp, useAskToShare, useCategories, useGroups, useLabels, useMeta, useRangeEntries } from '../context'
 import { saveFile } from '../lib/backup'
 import { addMonths, formatDate, monthLabel, monthOf, monthRange, today } from '../lib/dates'
 import { amountToInput, formatEuro, parseAmount } from '../lib/format'
 import { haptic } from '../lib/haptics'
 import { settledItems, type Statement } from '../lib/parents'
-import { monthReport, parentsReport } from '../lib/pdf'
+import { parentsReport } from '../lib/pdf'
+import { useStatement } from './StatementView'
 import { withoutParents } from '../lib/stats'
 import { StatusBadge, useStatements } from './ParentsCard'
 import { MonthPicker, Segmented, Sheet, Switch } from './ui'
@@ -45,6 +46,9 @@ export function ReportSheet({ month: initialMonth, kind: initialKind, onClose }:
   const earlierOpen = book.statements.filter((st) => st.month < month).reduce((sum, st) => sum + st.open, 0)
   const settled = useMemo(() => settledItems(book), [book])
   const shown = withoutParents(entries, hide)
+  const labels = useLabels()
+  const monthPeriod = useMemo(() => ({ kind: 'month' as const, key: month }), [month])
+  const monthStatement = useStatement(monthPeriod)
 
   // The payment field starts with what is open; a smaller amount is a partial payment
   useEffect(() => setPayment(statement.open > 0 ? amountToInput(statement.open) : ''), [month, statement.open])
@@ -60,7 +64,7 @@ export function ReportSheet({ month: initialMonth, kind: initialKind, onClose }:
     try {
       const blob = kind === 'parents'
         ? await parentsReport(statement, { ...options, earlierOpen, settled }, onProgress)
-        : await monthReport(month, shown, categories, groups, { ...options, photos: withPhotos, hiddenParents: hide }, onProgress)
+        : await (await import('../lib/exports')).statementPdf({ statement: monthStatement!, categories, groups, labels, name: own, photos: withPhotos, hiddenParents: hide }, onProgress)
       setProgress('Bereit zum Teilen …')
       const file = kind === 'parents' ? `Abrechnung-Eltern-${month}.pdf` : `Monatsbericht-${month}.pdf`
       const shared = await saveFile(file, blob, 'application/pdf', askToShare)

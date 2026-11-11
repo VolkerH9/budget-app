@@ -49,7 +49,7 @@ Mit Labels markierst du Buchungen zusätzlich zu ihrer Kategorie, z. B. alles vo
 - **Von Hand**: im Eintragsformular über „Label“ bzw. „Labels“.
 - **Label-Übersicht**: Summe, Aufteilung nach Bereichen und Kategorien, Betrag pro Tag, Budget-Fortschritt und alle Buchungen.
 - **Für alle Buchungen eines Labels**: als Eltern-Kosten markieren oder die Markierung entfernen, Kategorie ändern, ein weiteres Label hinzufügen oder entfernen. Vorher siehst du, wie viele Buchungen betroffen sind, danach kannst du es rückgängig machen.
-- **Filter**: In den Einträgen nach Label filtern. Die CSV-Datei enthält eine Spalte „Labels“.
+- **Filter**: In den Einträgen, der Abrechnung und beim Auswählen nach Labels filtern. CSV, Excel und PDF enthalten die Labels.
 
 ## Budgets & Ziele
 
@@ -62,11 +62,44 @@ Im Tab **Budgets**:
 - Gelb ab 80 %, rot bei Überschreitung. Ab dem 5. Tag eines Zeitraums kommt eine Prognose aus dem bisherigen Tempo, z. B. „Bei diesem Tempo überschreitest du das Budget am 24.11.“ oder „Voraussichtlich 120 € unter Budget“, bei Sparzielen „Bei deiner aktuellen Rate erreichst du das Ziel am …“.
 - Die Übersicht zeigt die dringendsten Budgets und bis zu zwei Sparziele kompakt.
 
+## Individuell: Einträge auswählen und zusammenrechnen
+
+**Einträge › Auswählen**: Einträge antippen, unten stehen Anzahl und Summe. Über **Filter** wählst du Kategorien oder ganze Überkategorien, Labels, einen Zeitraum von–bis und Beträge von–bis; dazu kommen Art und Suche. „Alle gefilterten auswählen“ nimmt alles in der Liste, einzelne wählst du danach wieder ab. **Ergebnis** zeigt Summe, Anzahl, Durchschnitt, Zeitraum und die Aufteilung nach Kategorien. **Label** weist den ausgewählten Buchungen ein Label zu oder entfernt es (mit Rückgängig). Gespeichert wird die Auswahl nicht.
+
+## Abrechnung für Monat und Jahr
+
+**Auswertung › Abrechnung**, Monat oder Jahr: Einnahmen, Ausgaben, Sparen, Rest und Sparquote mit Vergleich zum Vormonat bzw. Vorjahr, Ausgaben nach Bereichen und Kategorien (Betrag, Anteil, Anzahl), Budgets und Sparziele, Labels, die zehn größten Ausgaben, Abos und Daueraufträge, Eltern-Kosten. Die Jahresabrechnung zeigt zusätzlich alle 12 Monate, den Durchschnitt und den teuersten und günstigsten Monat. Oben kannst du nach Labels filtern.
+
+Nach jedem Monatsende (und im Januar fürs Vorjahr) steht in der Übersicht „Deine Abrechnung für Oktober ist fertig“.
+
+**Export**: PDF (alle Kennzahlen, Diagramme, Tabellen und alle Buchungen), Excel (Blätter Übersicht mit Diagramm, Alle Buchungen, Kategorien, Überkategorien, Labels, Budgets & Ziele, Eltern-Kosten; Summen als Formeln, Euro- und Datumsformat, Filter, rot bei Budgetüberschreitung) und CSV. Dateinamen: `Budget_2026-10_Oktober.pdf`, `Budget_2026_Jahresabrechnung.xlsx`. „Exportieren & ablegen“ gibt PDF und Excel zusammen ans Teilen-Menü.
+
+### Kurzbefehl „Budget ablegen“
+
+Eine Web-App darf nicht selbst in einen Ordner speichern. Der Kurzbefehl übernimmt das:
+
+1. App **Kurzbefehle** öffnen, **+** tippen, Name: **Budget ablegen**.
+2. Unten auf **(i)** tippen und **Im Teilen-Menü anzeigen** einschalten. Bei „Teilen-Menü-Typen“ nur **Dateien** wählen.
+3. Aktion **Wiederholen mit jedem Objekt** hinzufügen (Eingabe: Kurzbefehleingabe).
+4. Darin: **Text abgleichen** mit dem Muster `\d{4}` im **Namen** des Wiederholungsobjekts. Das ist das Jahr aus dem Dateinamen.
+5. Darin: **Datei sichern** mit dem Wiederholungsobjekt. „Fragen, wo gesichert werden soll“ aus, Ziel **iCloud Drive**, Unterpfad `Budget/` + **Übereinstimmungen** + `/`, **Überschreiben, falls vorhanden** an.
+6. In der App „Exportieren & ablegen“ tippen und im Teilen-Menü **Budget ablegen** wählen. Die Dateien landen in iCloud Drive › Budget › 2026.
+
+Optional als Erinnerung: Kurzbefehle › **Automation** › **Neue Automation** › **Tageszeit**, monatlich am 1. um 9:00, **Sofort ausführen**, Aktion **Mitteilung anzeigen** („Budget-Abrechnung exportieren“). Öffnen kann die Automation die App nicht, weil iOS Web-Apps vom Home-Bildschirm nicht per Kurzbefehl startet.
+
+## Kann ich mir das leisten?
+
+Auf der Übersicht oder im Eintragsformular. Betrag, optional Name, Kategorie, Label, Zeitpunkt (jetzt oder ein Monat) und „verteilt auf“ mehrere Monate. Die Ampel zeigt grün (passt locker), gelb (knapp) oder rot (sprengt Budget oder Ziel) mit einem Satz Begründung. Darunter: Rest im Monat vorher und nachher (mit Abos, Daueraufträgen und dem bisherigen Tempo), betroffene Budgets, mögliche Sparquote und was mit deinen Sparzielen passiert. Mit Stundenlohn (Einstellungen › Stundenlohn) steht dabei, wie viele Arbeitsstunden das sind. „Jetzt als Ausgabe buchen“ öffnet das Formular vorausgefüllt, „Auf Wunschliste setzen“ merkt den Kauf. Der Rechner ändert nichts, solange du nicht buchst.
+
+## Rückblick („Wrapped“)
+
+Nach jedem Monat mit genug Buchungen (im Januar auch fürs Vorjahr) erscheint „Dein Oktober-Rückblick ist da“. Antippen rechts geht weiter, links zurück, Halten pausiert. Karten: Bilanz, Top-Kategorie, teuerste Woche und teuerster Tag, wo es weniger und wo es mehr wurde, Vergleich zum Vormonat, Lieblingsladen, Labels, Budgets und Ziele, ein Fun Fact und ein Abschluss mit Ausblick. „Karte teilen“ macht ein Bild, mit „Nur Prozente“ ohne Beträge. Alle Rückblicke stehen unter Auswertung › Abrechnung › Rückblicke.
+
 ## Überkategorien, Eltern-Kosten und Auswertung
 
 - **Überkategorien**: Einstellungen › Kategorien. Überkategorien anlegen, umbenennen, löschen; eine Kategorie verschiebst du, indem du sie antippst und eine andere Überkategorie wählst.
 - **Eltern-Kosten**: Ausgaben für deine Eltern buchst du in „Eltern“ oder markierst sie in ihrer eigenen Kategorie mit dem Schalter „Eltern-Kosten“ (z. B. ein Restaurantbesuch). Ihre Rückzahlungen buchst du in „Kostenrückzahlung Eltern“. „Offen von Eltern“ ist die Differenz. Jeder Monat mit Eltern-Ausgaben hat automatisch eine eigene Abrechnung (Übersicht › Offen von Eltern › Abrechnungen) mit Status offen, teilweise bezahlt oder bezahlt. Nach einer neuen Rückzahlung fragt die App, für welche Abrechnung sie ist, und schlägt die älteste offene vor. Eine Zahlung ohne Zuordnung bezahlt die älteste offene Abrechnung, ein Überschuss die nächste. Ist eine Abrechnung ganz bezahlt, gelten ihre Posten als erstattet; einzelne Ausgaben hakst du zusätzlich von Hand ab. „Eltern-Kosten ausblenden“ nimmt beide Kategorien aus allen Summen.
-- **Auswertung**: Jahr gegen Vergleichsjahr oder zwei beliebige Monate nebeneinander.
+- **Auswertung › Vergleich**: Jahr gegen Vergleichsjahr oder zwei beliebige Monate nebeneinander.
 
 ## Abos
 
@@ -82,7 +115,7 @@ Im Tab **Budgets**:
 
 ## Backup
 
-**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Labels, Budgets, Sparziele, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Am eingestellten Tag jedes Monats (Standard: der 1.) erinnert die Übersicht an das Backup, ein Tipp startet es. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
+**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Labels, Budgets, Sparziele, die Wunschliste, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Am eingestellten Tag jedes Monats (Standard: der 1.) erinnert die Übersicht an das Backup, ein Tipp startet es. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
 
 **Auf einem neuen iPhone wiederherstellen**
 

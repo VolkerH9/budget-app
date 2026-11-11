@@ -5,7 +5,8 @@ import { db, newId, PARENTS_EXPENSE, PARENTS_REFUND, setMeta, type Entry } from 
 import { createBackup, createBackupFile, openBackupFile, parseBackup, readSealed, restoreBackup } from './backup'
 import { DATA_VERSION, migrateData, renameLeisure } from './migrate'
 import { paymentEffect, settledItems, statements } from './parents'
-import { monthReport, parentsReport, pdfText } from './pdf'
+import { parentsReport, pdfText, statementReport } from './pdf'
+import { buildStatement } from './statement'
 import { backupState, parentsReportDue, reportMonth } from './reminders'
 import { changeCode, closeSession, deletePhotos, loadPhoto, prepareSetup, prunePhotos, resetDevice, savePhotos, setupVault, store, unlockWithCode, whenSaved } from './vault'
 import { formatEuro } from './format'
@@ -61,7 +62,7 @@ describe('Umbenennung Kino & Freizeit', () => {
     backup.categories = backup.categories.map((c) => (c.id === 'exp-freizeit' ? { ...c, name: 'Kino & Freizeit' } : c))
     await restoreBackup(parseBackup(JSON.stringify(backup)))
     expect((await db.categories.get('exp-freizeit'))?.name).toBe('Freizeit')
-    expect(migrateData({ categories: backup.categories, groups: [], entries: [], recurring: [], meta: [], labels: [], budgets: [], goals: [] }, 3).categories.find((c) => c.id === 'exp-freizeit')?.name).toBe('Freizeit')
+    expect(migrateData({ categories: backup.categories, groups: [], entries: [], recurring: [], meta: [], labels: [], budgets: [], goals: [], wishes: [] }, 3).categories.find((c) => c.id === 'exp-freizeit')?.name).toBe('Freizeit')
   })
 })
 
@@ -266,13 +267,16 @@ describe('PDF', () => {
     // Two pages for 40 rows and the sums, then 40 photo pages
     expect(await pages(blob)).toBe(42)
   }, 60_000)
-  it('erstellt den Monatsbericht, mit und ohne Fotos', async () => {
+  it('erstellt die Monatsabrechnung, mit und ohne Fotos', async () => {
     await savePhotos([{ id: 'p', data: await jpeg() }])
     const list = [entry({ photos: ['p'] }), entry({ type: 'income', categoryId: 'inc-income', amount: 200000 }), entry({ type: 'saving', categoryId: 'sav-investitionen', amount: 30000 })]
     const categories = await db.categories.toArray()
     const groups = await db.groups.toArray()
-    const options = { name: '', created: '08.11.2026', hiddenParents: false }
-    expect(await pages(await monthReport('2026-10', list, categories, groups, { ...options, photos: false }))).toBe(1)
-    expect(await pages(await monthReport('2026-10', list, categories, groups, { ...options, photos: true }))).toBe(2)
+    const statement = buildStatement({ kind: 'month', key: '2026-10' }, { entries: list, categories, groups, labels: [], recurring: [], budgets: [], goals: [], now: '2026-11-08', euro: formatEuro })
+    const options = { name: '', created: '08.11.2026', categories, groups, labels: [] }
+    // Key figures on page 1, all entries on page 2, then the photo
+    expect(await pages(await statementReport(statement, { ...options, photos: false }))).toBe(2)
+    expect(await pages(await statementReport(statement, { ...options, photos: true }))).toBe(3)
   })
+
 })

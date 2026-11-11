@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { FileText } from 'lucide-react'
-import { db, type EntryType } from '../db'
+import { FileText, Sparkles } from 'lucide-react'
+import { db, type Entry, type EntryType } from '../db'
 import { useApp, useCategories, useGroups, useMeta, useRangeEntries } from '../context'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { Icon } from '../components/Icon'
@@ -11,6 +11,9 @@ import { addMonths, monthLabel, monthOf, today } from '../lib/dates'
 import { formatEuro, formatPercent } from '../lib/format'
 import { change, compareTree, inPeriod, monthlySeries, monthPeriod, summarize, withoutParents, yearHighlights, yearPeriod, type CompareNode, type MonthSummary } from '../lib/stats'
 import { IncomeVsExpense } from './Overview'
+import { StatementView } from '../components/StatementView'
+import type { StatementPeriod } from '../lib/statement'
+import { hasWrapped } from '../lib/wrapped'
 
 const TYPES: [EntryType, string][] = [['expense', 'Ausgaben'], ['income', 'Einnahmen'], ['saving', 'Sparen']]
 const MONTH_NAMES = (month: string) => monthLabel(month).split(' ')[0]
@@ -239,16 +242,57 @@ function MonthView({ hide }: { hide: boolean }) {
   )
 }
 
+/** All past reviews: months with enough entries and the years */
+function Reviews() {
+  const { openWrapped } = useApp()
+  const entries = useLiveQuery(() => db.entries.toArray(), [], [] as Entry[])
+  const now = today()
+  const months = Array.from({ length: 24 }, (_, i) => addMonths(monthOf(now), -1 - i)).filter((m) => hasWrapped(entries, { kind: 'month', key: m }))
+  const thisYear = Number(now.slice(0, 4))
+  const years = Array.from({ length: 5 }, (_, i) => String(thisYear - 1 - i)).filter((y) => hasWrapped(entries, { kind: 'year', key: y }))
+  if (months.length === 0 && years.length === 0) return null
+  return (
+    <>
+      <h2 className="section-title strong">Rückblicke</h2>
+      <div className="review-strip">
+        {years.map((y) => <button key={y} className="review-tile year" onClick={() => openWrapped(y)}><Sparkles size={16} aria-hidden="true" /><b>{y}</b><span>Jahr</span></button>)}
+        {months.map((m) => <button key={m} className="review-tile" onClick={() => openWrapped(m)}><b>{monthLabel(m).split(' ')[0]}</b><span>{m.slice(0, 4)}</span></button>)}
+      </div>
+    </>
+  )
+}
+
 export function Analysis() {
+  const [view, setView] = useSticky<'statement' | 'compare'>('analysis-view', 'statement')
   const [mode, setMode] = useSticky<'year' | 'month'>('analysis-mode', 'year')
   const hide = useMeta('hideParents', false)
-  const { openReport } = useApp()
+  const { openReport, statementTarget, clearStatementTarget } = useApp()
+  const [target, setTarget] = useState<StatementPeriod | undefined>(undefined)
+  useEffect(() => {
+    if (!statementTarget) return
+    setTarget({ kind: statementTarget.length === 4 ? 'year' : 'month', key: statementTarget })
+    setView('statement')
+    clearStatementTarget()
+  }, [statementTarget, clearStatementTarget, setView])
   return (
     <main className="page">
       <h1 className="page-title">Auswertung</h1>
-      <Segmented value={mode} options={[['year', 'Jahr'], ['month', 'Monat']]} onChange={setMode} />
+      <Segmented value={view} options={[['statement', 'Abrechnung'], ['compare', 'Vergleich']]} onChange={setView} />
       <div className="group" style={{ margin: '10px 0 12px' }}><HideParentsRow hide={hide} /></div>
-      {mode === 'year' ? <YearView hide={hide} /> : <MonthView hide={hide} />}
+      {view === 'statement'
+        ? (
+          <>
+            <StatementView key={target ? `${target.kind}:${target.key}` : 'now'} initial={target} />
+            <Reviews />
+          </>
+        )
+        : (
+          <>
+            <Segmented value={mode} options={[['year', 'Jahr'], ['month', 'Monat']]} onChange={setMode} />
+            <div style={{ height: 10 }} />
+            {mode === 'year' ? <YearView hide={hide} /> : <MonthView hide={hide} />}
+          </>
+        )}
       <div className="group" style={{ marginTop: 20 }}>
         <button className="row tint" onClick={() => openReport()}>
           <FileText size={20} strokeWidth={1.8} aria-hidden="true" />

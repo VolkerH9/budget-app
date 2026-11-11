@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Category, type Entry, type Group, type Label } from './db'
 import type { AlertButton } from './components/ui'
 import type { AskToShare } from './lib/backup'
+import type { AffordDraft } from './components/AffordSheet'
 
 export interface AlertRequest {
   title: string
@@ -15,8 +16,10 @@ export type SettingsPage = 'categories' | 'recurring' | 'subscriptions' | 'secur
 export interface AppContext {
   month: string
   setMonth: (month: string) => void
-  /** Opens the entry form, empty or for an existing entry */
-  openEntry: (entry?: Entry) => void
+  /** Opens the entry form: empty, for an existing entry, or prefilled with a draft */
+  openEntry: (entry?: Entry, draft?: Partial<Entry>) => void
+  /** Opens "Kann ich mir das leisten?", optionally prefilled */
+  openAfford: (draft?: AffordDraft) => void
   /** Removes the entry and offers Rückgängig */
   deleteEntry: (entry: Entry) => void
   toast: (text: string, onUndo?: () => void) => void
@@ -32,6 +35,13 @@ export interface AppContext {
   openLabel: (id: string) => void
   /** Switches to a tab of the bottom bar */
   openTab: (tab: Tab) => void
+  /** Opens the statement of a month ('YYYY-MM') or year ('YYYY') in the Auswertung tab */
+  openStatement: (key: string) => void
+  /** Plays the review of a month ('YYYY-MM') or year ('YYYY') */
+  openWrapped: (key: string) => void
+  /** Statement the Auswertung tab should show once, then cleared */
+  statementTarget: string | null
+  clearStatementTarget: () => void
 }
 
 export type Tab = 'overview' | 'entries' | 'analysis' | 'budgets' | 'settings'
