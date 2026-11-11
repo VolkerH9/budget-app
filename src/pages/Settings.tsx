@@ -5,6 +5,7 @@ import { useApp, useCategories, useGroups, useMeta, type SettingsPage } from '..
 import { Icon } from '../components/Icon'
 import { Segmented, Sheet, Switch } from '../components/ui'
 import { BackupImport } from '../components/BackupImport'
+import { LabelsList } from '../components/Labels'
 import { useBackupExport } from '../components/BackupExport'
 import { backupName, saveFile, toCsv } from '../lib/backup'
 import { formatTime } from '../lib/dates'
@@ -106,7 +107,8 @@ function GoalSheet({ onClose }: { onClose: () => void }) {
 }
 
 export function Settings() {
-  const { alert, toast, settingsPage, clearSettingsPage, openReport } = useApp()
+  const { alert, toast, settingsPage, clearSettingsPage, openReport, openLabel } = useApp()
+  const labelCount = useLiveQuery(() => db.labels.filter((l) => !l.archived).count(), [], 0)
   const categories = useCategories()
   const groups = useGroups()
   const [sub, setSub] = useState<Sub>(settingsPage)
@@ -141,6 +143,7 @@ export function Settings() {
   if (sub === 'security') return <SecurityPage onBack={() => setSub(null)} />
   if (sub === 'scan') return <ScanPage onBack={() => setSub(null)} />
   if (sub === 'design') return <DesignPage onBack={() => setSub(null)} />
+  if (sub === 'labels') return <SubPage title="Labels" onBack={() => setSub(null)}><LabelsList onOpen={openLabel} /></SubPage>
 
   const fail = (error: unknown) => alert({ title: 'Das hat nicht geklappt', message: (error as Error).message, buttons: [{ label: 'OK', style: 'strong' }] })
 
@@ -148,7 +151,7 @@ export function Settings() {
 
   const exportCsv = async () => {
     const entries = await db.entries.orderBy('date').toArray()
-    await saveFile(backupName('csv'), toCsv(entries, categories, groups), 'text/csv').catch(fail)
+    await saveFile(backupName('csv'), toCsv(entries, categories, groups, await db.labels.toArray()), 'text/csv').catch(fail)
   }
 
   const NavRow = ({ label, value, onClick }: { label: string; value?: string; onClick: () => void }) => (
@@ -166,6 +169,7 @@ export function Settings() {
       <h2 className="section-title">Planung</h2>
       <div className="group">
         <NavRow label="Kategorien" value={String(categories.length)} onClick={() => setSub('categories')} />
+        <NavRow label="Labels" value={String(labelCount)} onClick={() => setSub('labels')} />
         <NavRow label="Abos" value={`${formatEuro(totals(subscriptions).month)} / Monat`} onClick={() => setSub('subscriptions')} />
         <NavRow label="Daueraufträge" value={String(standing)} onClick={() => setSub('recurring')} />
         <NavRow label="Sparziel" value={goal === null ? 'Aus' : `${goal} %`} onClick={() => setGoalOpen(true)} />

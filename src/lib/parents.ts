@@ -1,8 +1,6 @@
-import { PARENTS_EXPENSE, PARENTS_REFUND, type Entry } from '../db'
+import { isParentsExpense as isExpense, isParentsRefund as isRefund, type Entry } from '../db'
 import { monthOf } from './dates'
 
-const isExpense = (e: Entry) => e.categoryId === PARENTS_EXPENSE && e.type === 'expense'
-const isRefund = (e: Entry) => e.categoryId === PARENTS_REFUND && e.type === 'income'
 const byDate = (a: Entry, b: Entry) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt
 
 export type StatementStatus = 'open' | 'partial' | 'paid'

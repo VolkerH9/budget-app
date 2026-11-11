@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Archive, BellRing, FileText, X } from 'lucide-react'
-import { db, PARENT_CATEGORIES, setMeta, type Entry } from '../db'
-import { useApp, useCategories, useGroups, useMeta, useRangeEntries } from '../context'
+import { db, isParentsEntry, setMeta, type Entry } from '../db'
+import { useApp, useCategories, useGroups, useLabels, useMeta, useRangeEntries } from '../context'
+import { LabelGlyph } from '../components/Labels'
+import { daysLeft, isActiveOn } from '../lib/labels'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { GroupSheet, previousMonthLabel, type DetailPeriods } from '../components/GroupSheet'
 import { HideParentsRow, ParentsCard } from '../components/ParentsCard'
@@ -155,6 +157,29 @@ function BackupHint() {
   )
 }
 
+/** "🏔️ Skiurlaub Tirol aktiv · noch 4 Tage" while a label's period runs */
+function ActiveLabels() {
+  const { openLabel } = useApp()
+  const labels = useLabels()
+  const now = today()
+  const active = labels.filter((l) => isActiveOn(l, now))
+  if (active.length === 0) return null
+  return (
+    <div className="active-labels">
+      {active.map((l) => {
+        const left = daysLeft(l, now)
+        return (
+          <button key={l.id} className="active-label" style={{ '--c': l.color } as React.CSSProperties} onClick={() => openLabel(l.id)}>
+            <LabelGlyph label={l} size={14} />
+            <span><b>{l.name}</b> aktiv{left !== null ? ` · noch ${left === 1 ? '1 Tag' : `${left} Tage`}` : ''}</span>
+            <span className="chevron" aria-hidden="true">›</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function ParentsReportHint({ parents }: { parents: Entry[] }) {
   const { openReport } = useApp()
   const enabled = useMeta('parentsReminder', true)
@@ -195,7 +220,7 @@ export function Overview() {
   const chartFrom = mode === 'month' ? monthPeriod(addMonths(month, -5)).from : whole.from
   const from = [previous.from, chartFrom, whole.from].sort()[0]
   const loaded = useRangeEntries(from, whole.to > current.to ? whole.to : current.to)
-  const parents = useLiveQuery(() => db.entries.where('categoryId').anyOf(PARENT_CATEGORIES).toArray(), [], [] as Entry[])
+  const parents = useLiveQuery(() => db.entries.filter(isParentsEntry).toArray(), [], [] as Entry[])
 
   const all = withoutParents(loaded, hide)
   const entries = inPeriod(all, current)
@@ -223,6 +248,7 @@ export function Overview() {
   return (
     <main className="page" {...(mode === 'month' ? swipe : {})}>
       <h1 className="page-title">Übersicht</h1>
+      <ActiveLabels />
       <Segmented value={mode} options={[['month', 'Monat'], ['year', 'Jahr']]} onChange={setMode} />
       <div style={{ height: 6 }} />
       {mode === 'month' ? <MonthPicker month={month} onChange={setMonth} /> : <YearPicker year={year} onChange={setYear} />}

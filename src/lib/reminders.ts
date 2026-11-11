@@ -1,4 +1,4 @@
-import { PARENTS_EXPENSE, type Entry } from '../db'
+import { isParentsExpense, type Entry } from '../db'
 import { addDays, addMonths, monthOf, today } from './dates'
 
 export interface BackupState {
@@ -36,5 +36,5 @@ export function parentsReportDue(now: string, entries: Entry[], done: string[], 
   if (!enabled) return null
   const month = reportMonth(now)
   if (done.includes(month)) return null
-  return entries.some((e) => e.categoryId === PARENTS_EXPENSE && e.type === 'expense' && monthOf(e.date) === month) ? month : null
+  return entries.some((e) => isParentsExpense(e) && monthOf(e.date) === month) ? month : null
 }

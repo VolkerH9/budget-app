@@ -3,7 +3,7 @@ import sharp from 'sharp'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db, newId, PARENTS_EXPENSE, PARENTS_REFUND, setMeta, type Entry } from '../db'
 import { createBackup, createBackupFile, openBackupFile, parseBackup, readSealed, restoreBackup } from './backup'
-import { migrateData, renameLeisure } from './migrate'
+import { DATA_VERSION, migrateData, renameLeisure } from './migrate'
 import { paymentEffect, settledItems, statements } from './parents'
 import { monthReport, parentsReport, pdfText } from './pdf'
 import { backupState, parentsReportDue, reportMonth } from './reminders'
@@ -46,7 +46,7 @@ describe('Umbenennung Kino & Freizeit', () => {
     await restart()
     expect(await db.categories.get('exp-freizeit')).toMatchObject({ name: 'Freizeit', budget: 4000, groupId: 'grp-freizeit' })
     expect(await db.entries.get(movie.id)).toMatchObject({ categoryId: 'exp-freizeit', note: 'Kino', amount: 1200 })
-    expect((await db.meta.get('dataVersion'))?.value).toBe(4)
+    expect((await db.meta.get('dataVersion'))?.value).toBe(DATA_VERSION)
     // Also stored that way, not only in memory
     await restart()
     expect((await db.categories.get('exp-freizeit'))?.name).toBe('Freizeit')
@@ -61,7 +61,7 @@ describe('Umbenennung Kino & Freizeit', () => {
     backup.categories = backup.categories.map((c) => (c.id === 'exp-freizeit' ? { ...c, name: 'Kino & Freizeit' } : c))
     await restoreBackup(parseBackup(JSON.stringify(backup)))
     expect((await db.categories.get('exp-freizeit'))?.name).toBe('Freizeit')
-    expect(migrateData({ categories: backup.categories, groups: [], entries: [], recurring: [], meta: [] }, 3).categories.find((c) => c.id === 'exp-freizeit')?.name).toBe('Freizeit')
+    expect(migrateData({ categories: backup.categories, groups: [], entries: [], recurring: [], meta: [], labels: [] }, 3).categories.find((c) => c.id === 'exp-freizeit')?.name).toBe('Freizeit')
   })
 })
 

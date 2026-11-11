@@ -48,6 +48,10 @@ export interface Entry {
   refunded?: boolean
   /** Repayment from the parents: the month of the statement it pays first */
   forMonth?: string
+  /** Expense in any category that the parents pay back, as if it were in "Eltern" */
+  forParents?: boolean
+  /** Ids of the labels on this entry */
+  labels?: string[]
   createdAt: number
   sample?: boolean
 }
@@ -78,6 +82,27 @@ export interface Recurring {
   sample?: boolean
 }
 
+export type LabelKind = 'trip' | 'event' | 'project' | 'gift' | 'other'
+
+/** A marker on entries in addition to their category, e.g. "🏔️ Skiurlaub Tirol 2026" */
+export interface Label {
+  id: string
+  name: string
+  color: string
+  emoji: string
+  /** Name of a line icon, see components/CategoryIcon */
+  icon?: string
+  symbol: 'icon' | 'emoji'
+  kind?: LabelKind
+  /** In cents, optional */
+  budget?: number
+  /** While a date lies in from–to, new entries of that date get the label */
+  from?: string
+  to?: string
+  archived?: boolean
+  createdAt: number
+}
+
 export interface Meta {
   key: string
   value: unknown
@@ -89,9 +114,10 @@ export type Tables = {
   entries: EntityTable<Entry, 'id'>
   recurring: EntityTable<Recurring, 'id'>
   meta: EntityTable<Meta, 'key'>
+  labels: EntityTable<Label, 'id'>
 }
 
-export const TABLES = ['categories', 'groups', 'entries', 'recurring', 'meta'] as const
+export const TABLES = ['categories', 'groups', 'entries', 'recurring', 'meta', 'labels'] as const
 export type TableName = (typeof TABLES)[number]
 
 // The in-memory database schedules its work with setImmediate. Safari has none,
@@ -117,10 +143,31 @@ db.version(1).stores({
   meta: 'key',
 })
 
+db.version(2).stores({
+  entries: 'id, date, [type+date], categoryId, recurringId, &recurringKey, *labels',
+  labels: 'id',
+})
+
 /** Fixed ids of the two categories the parents switch looks at */
 export const PARENTS_EXPENSE = 'exp-eltern'
 export const PARENTS_REFUND = 'inc-rueckzahlung'
 export const PARENT_CATEGORIES = [PARENTS_EXPENSE, PARENTS_REFUND]
+
+/** An expense the parents pay back: in "Eltern", or marked for them in another category */
+export const isParentsExpense = (e: Entry) => e.type === 'expense' && (e.categoryId === PARENTS_EXPENSE || !!e.forParents)
+export const isParentsRefund = (e: Entry) => e.type === 'income' && e.categoryId === PARENTS_REFUND
+export const isParentsEntry = (e: Entry) => isParentsExpense(e) || isParentsRefund(e)
+
+/** Calm label colours, readable as chips in light and dark mode */
+export const LABEL_COLORS = [
+  '#4a76c8', '#2f86b5', '#1f9a9a', '#2f9a76', '#5a9a3c', '#8d9a2a', '#a8861a', '#c87a22',
+  '#c86f30', '#cc5c50', '#cc5c70', '#b8558f', '#a066cc', '#7a6bd1', '#5d6fa8', '#8d7b68',
+]
+
+export const LABEL_KINDS: [LabelKind, string, string][] = [
+  ['trip', 'Urlaub', 'plane'], ['event', 'Event', 'party-popper'], ['project', 'Projekt', 'wrench'],
+  ['gift', 'Geschenke', 'gift'], ['other', 'Sonstiges', 'sparkles'],
+]
 export const SUBSCRIPTION_CATEGORY = 'exp-abos'
 
 // Muted colours, checked for colour blindness and contrast in light and dark mode

@@ -1,4 +1,4 @@
-import { PARENT_CATEGORIES, PARENTS_EXPENSE, PARENTS_REFUND, type Category, type Entry, type EntryType, type Group } from '../db'
+import { isParentsEntry, isParentsExpense, isParentsRefund, type Category, type Entry, type EntryType, type Group } from '../db'
 import { addMonths, monthOf, monthRange } from './dates'
 
 export interface MonthSummary {
@@ -108,7 +108,7 @@ export const inPeriod = (entries: Entry[], p: Period) => entries.filter((e) => e
 
 /** The switch "Eltern-Kosten ausblenden" takes both parents categories out of every sum. */
 export const withoutParents = (entries: Entry[], hide: boolean) =>
-  hide ? entries.filter((e) => !PARENT_CATEGORIES.includes(e.categoryId)) : entries
+  hide ? entries.filter((e) => !isParentsEntry(e)) : entries
 
 export function sumByCategory(entries: Entry[], type: EntryType = 'expense'): Map<string, number> {
   const totals = new Map<string, number>()
@@ -158,9 +158,9 @@ export interface ParentsBalance {
 }
 
 export function parentsBalance(entries: Entry[]): ParentsBalance {
-  const own = entries.filter((e) => e.categoryId === PARENTS_EXPENSE && e.type === 'expense')
+  const own = entries.filter(isParentsExpense)
   const spent = own.reduce((sum, e) => sum + e.amount, 0)
-  const refunded = entries.filter((e) => e.categoryId === PARENTS_REFUND && e.type === 'income').reduce((sum, e) => sum + e.amount, 0)
+  const refunded = entries.filter(isParentsRefund).reduce((sum, e) => sum + e.amount, 0)
   return { spent, refunded, open: spent - refunded, entries: own.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt) }
 }
 

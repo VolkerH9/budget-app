@@ -1,4 +1,4 @@
-import { db, getMeta, setMeta, type Category, type Entry, type Group, type Recurring } from '../db'
+import { db, getMeta, setMeta, type Category, type Entry, type Group, type Label, type Recurring } from '../db'
 import { isValidIso, today } from './dates'
 import { expectSystemDialog } from './lockGuard'
 import { DATA_VERSION, migrateData } from './migrate'
@@ -29,6 +29,8 @@ export interface Backup {
   recurring: Recurring[]
   settings: Settings
   photos?: PhotoRef[]
+  /** Since version 5 */
+  labels?: Label[]
 }
 
 /** A backup file since version 4: everything inside `data` is encrypted, photos included. */
@@ -59,6 +61,7 @@ export async function createBackup(): Promise<Backup> {
     groups: await db.groups.orderBy('order').toArray(),
     entries: await db.entries.orderBy('date').toArray(),
     recurring: await db.recurring.toArray(),
+    labels: await db.labels.toArray(),
     settings: {
       savingsGoal: await getMeta<number | null>('savingsGoal', null),
       saveThumbnails: await getMeta('saveThumbnails', true),
@@ -196,21 +199,26 @@ export function parseBackup(text: string): Backup {
   }
   const categoryIds = new Set(data.categories.map((c) => c?.id))
   const categoriesOk = data.categories.every((c) => typeof c.id === 'string' && typeof c.name === 'string' && isType(c.type))
+  if (data.labels !== undefined && (!Array.isArray(data.labels) || !data.labels.every((l) => typeof l?.id === 'string' && typeof l.name === 'string'))) {
+    throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
+  }
+  const labelsOk = (e: Entry) => e.labels === undefined || (Array.isArray(e.labels) && e.labels.every((id) => typeof id === 'string'))
   const photosOk = (e: Entry) => e.photos === undefined || (Array.isArray(e.photos) && e.photos.every((id) => typeof id === 'string'))
-  const entriesOk = data.entries.every((e) => typeof e.id === 'string' && isType(e.type) && isCents(e.amount) && isValidIso(e.date) && categoryIds.has(e.categoryId) && photosOk(e))
+  const entriesOk = data.entries.every((e) => typeof e.id === 'string' && isType(e.type) && isCents(e.amount) && isValidIso(e.date) && categoryIds.has(e.categoryId) && photosOk(e) && labelsOk(e))
   // Abos without an amount yet are allowed
   const recurringOk = data.recurring.every((r) => typeof r.id === 'string' && isType(r.type) && (isCents(r.amount) || (!!r.subscription && r.amount === 0)) && isValidIso(r.startDate) && isValidIso(r.nextDue) && categoryIds.has(r.categoryId))
   if (!categoriesOk || !entriesOk || !recurringOk) throw new Error('Das Backup ist beschädigt und wurde nicht eingespielt.')
   return data
 }
 
-/** Replaces all entries, categories, overcategories, standing orders, Abos and photos. Older files are migrated. */
+/** Replaces all entries, categories, overcategories, standing orders, Abos, labels and photos. Older files are migrated. */
 export async function restoreBackup(backup: Backup, photos: Photo[] = []): Promise<void> {
   // Photos first, so no restored entry points to a missing photo
   await savePhotos(photos)
-  const data = migrateData({ categories: backup.categories, groups: backup.groups ?? [], entries: backup.entries, recurring: backup.recurring, meta: [] }, backup.version)
-  await db.transaction('rw', db.categories, db.groups, db.entries, db.recurring, db.meta, async () => {
-    await Promise.all([db.categories.clear(), db.groups.clear(), db.entries.clear(), db.recurring.clear()])
+  const data = migrateData({ categories: backup.categories, groups: backup.groups ?? [], entries: backup.entries, recurring: backup.recurring, meta: [], labels: backup.labels ?? [] }, backup.version)
+  await db.transaction('rw', [db.categories, db.groups, db.entries, db.recurring, db.meta, db.labels], async () => {
+    await Promise.all([db.categories.clear(), db.groups.clear(), db.entries.clear(), db.recurring.clear(), db.labels.clear()])
+    await db.labels.bulkAdd(data.labels)
     await db.groups.bulkAdd(data.groups)
     await db.categories.bulkAdd(data.categories)
     await db.entries.bulkAdd(data.entries)
@@ -233,8 +241,9 @@ function cell(value: string): string {
   return /[";\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
-export function toCsv(entries: Entry[], categories: Category[], groups: Group[] = []): string {
+export function toCsv(entries: Entry[], categories: Category[], groups: Group[] = [], labels: Label[] = []): string {
   const byId = new Map(categories.map((c) => [c.id, c]))
+  const labelNames = new Map(labels.map((l) => [l.id, l.name]))
   const groupNames = new Map(groups.map((g) => [g.id, g.name]))
   const rows = entries.map((e) => [
     e.date.split('-').reverse().join('.'),
@@ -245,9 +254,10 @@ export function toCsv(entries: Entry[], categories: Category[], groups: Group[] 
     e.merchant ?? '',
     e.note ?? '',
     e.recurringId ? 'ja' : 'nein',
+    (e.labels ?? []).map((id) => labelNames.get(id)).filter(Boolean).join(', '),
   ].map(cell).join(';'))
   // The byte order mark tells Excel the file is UTF-8; semicolons fit the German setup
-  return `﻿${['Datum;Art;Überkategorie;Kategorie;Betrag;Händler;Notiz;Dauerauftrag', ...rows].join('\r\n')}\r\n`
+  return `﻿${['Datum;Art;Überkategorie;Kategorie;Betrag;Händler;Notiz;Dauerauftrag;Labels', ...rows].join('\r\n')}\r\n`
 }
 
 export type AskToShare = (share: () => void, cancel: () => void) => void

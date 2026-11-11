@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Check } from 'lucide-react'
-import { db, PARENT_CATEGORIES, setMeta, type Entry } from '../db'
+import { db, isParentsEntry, setMeta, type Entry } from '../db'
 import { useApp } from '../context'
 import { formatDate, monthLabel, today } from '../lib/dates'
 import { formatEuro } from '../lib/format'
@@ -24,7 +24,7 @@ export function HideParentsRow({ hide }: { hide: boolean }) {
 
 /** All parents entries and the monthly statements made from them */
 export function useStatements(): { entries: Entry[]; book: StatementBook } {
-  const entries = useLiveQuery(() => db.entries.where('categoryId').anyOf(PARENT_CATEGORIES).toArray(), [], [] as Entry[])
+  const entries = useLiveQuery(() => db.entries.filter(isParentsEntry).toArray(), [], [] as Entry[])
   const book = useMemo(() => statements(entries, today()), [entries])
   return { entries, book }
 }

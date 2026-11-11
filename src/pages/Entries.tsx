@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Paperclip } from 'lucide-react'
-import { db, PARENTS_EXPENSE, type Category, type Entry, type EntryType } from '../db'
-import { useApp, useCategories } from '../context'
+import { db, isParentsExpense, type Category, type Entry, type EntryType, type Label } from '../db'
+import { useApp, useCategories, useLabels } from '../context'
 import { Icon } from '../components/Icon'
 import { useStatements } from '../components/ParentsCard'
+import { LabelChip } from '../components/Labels'
 import { PhotoViewer } from '../components/PhotoViewer'
 import { SwipeRow } from '../components/SwipeRow'
 import { MonthPicker } from '../components/ui'
@@ -20,7 +21,7 @@ export function EntryAmount({ entry }: { entry: Entry }) {
   return <span className={`row-value num amount-${entry.type}`} style={entry.type === 'expense' ? { color: 'var(--label)' } : undefined}>{SIGN[entry.type]}{formatEuro(entry.amount)}</span>
 }
 
-function EntryRow({ entry, category, settled }: { entry: Entry; category?: Category; settled: boolean }) {
+function EntryRow({ entry, category, settled, labels }: { entry: Entry; category?: Category; settled: boolean; labels: Map<string, Label> }) {
   const { openEntry, deleteEntry } = useApp()
   const [viewing, setViewing] = useState(false)
   const detail = entry.merchant && entry.note ? `${entry.merchant} · ${entry.note}` : entry.merchant || entry.note
@@ -33,11 +34,17 @@ function EntryRow({ entry, category, settled }: { entry: Entry; category?: Categ
           <CategoryIcon category={category} />
           <span className="row-main">
             <button className="row-link row-title" onClick={() => openEntry(entry)}>{category?.name ?? 'Ohne Kategorie'}</button>
-            {(detail || entry.recurringId || settled) && (
+            {(detail || entry.recurringId || settled || entry.forParents) && (
               <span className="row-sub" style={{ display: 'block' }}>
                 {entry.recurringId && <span className="badge">Dauerauftrag</span>}
                 {settled && <span className="badge">Erstattet</span>}
+                {entry.forParents && !settled && <span className="badge">Eltern</span>}
                 {detail}
+              </span>
+            )}
+            {!!entry.labels?.length && (
+              <span className="row-labels">
+                {entry.labels.map((id) => labels.get(id)).filter((l) => !!l).map((l) => <LabelChip key={l.id} label={l} small />)}
               </span>
             )}
           </span>
@@ -63,6 +70,9 @@ export function Entries() {
   const categories = useCategories()
   const [type, setType] = useState<EntryType | 'all'>('all')
   const [categoryId, setCategoryId] = useState('')
+  const [labelId, setLabelId] = useState('')
+  const allLabels = useLabels()
+  const labelsById = useMemo(() => new Map(allLabels.map((l) => [l.id, l])), [allLabels])
   const [query, setQuery] = useState('')
   const [allMonths, setAllMonths] = useState(false)
 
@@ -79,10 +89,10 @@ export function Entries() {
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return entries
-      .filter((e) => (type === 'all' || e.type === type) && (!categoryId || e.categoryId === categoryId))
+      .filter((e) => (type === 'all' || e.type === type) && (!categoryId || e.categoryId === categoryId) && (!labelId || !!e.labels?.includes(labelId)))
       .filter((e) => !needle || `${e.note ?? ''} ${e.merchant ?? ''}`.toLowerCase().includes(needle))
       .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)
-  }, [entries, type, categoryId, query])
+  }, [entries, type, categoryId, labelId, query])
 
   const days = useMemo(() => {
     const map = new Map<string, Entry[]>()
@@ -92,7 +102,8 @@ export function Entries() {
 
   const pickable = categories.filter((c) => type === 'all' || c.type === type)
   const selected = byId.get(categoryId)
-  const hasFilter = type !== 'all' || categoryId || query.trim()
+  const hasFilter = type !== 'all' || categoryId || labelId || query.trim()
+  const chosenLabel = labelsById.get(labelId)
 
   return (
     <main className="page">
@@ -118,6 +129,20 @@ export function Entries() {
             {pickable.map((c) => <option key={c.id} value={c.id}>{categoryText(c)}</option>)}
           </select>
         </button>
+        {allLabels.length > 0 && (
+          <button className="chip" style={{ position: 'relative' }} aria-pressed={!!labelId}>
+            {chosenLabel ? `${chosenLabel.symbol === 'emoji' ? `${chosenLabel.emoji} ` : ''}${chosenLabel.name}` : 'Label'} ▾
+            <select
+              aria-label="Nach Label filtern"
+              style={{ position: 'absolute', inset: 0, width: '100%', opacity: 0 }}
+              value={labelId}
+              onChange={(e) => setLabelId(e.target.value)}
+            >
+              <option value="">Alle Labels</option>
+              {allLabels.map((l) => <option key={l.id} value={l.id}>{l.symbol === 'emoji' ? `${l.emoji} ` : ''}{l.name}{l.archived ? ' (archiviert)' : ''}</option>)}
+            </select>
+          </button>
+        )}
         <button className="chip" aria-pressed={allMonths} onClick={() => setAllMonths(!allMonths)}>Alle Monate</button>
       </div>
 
@@ -132,7 +157,7 @@ export function Entries() {
         <section key={date}>
           <div className="day-title"><span>{dayLabel(date)}</span></div>
           <div className="group">
-            {rows.map((entry) => <EntryRow key={entry.id} entry={entry} category={byId.get(entry.categoryId)} settled={entry.categoryId === PARENTS_EXPENSE && settled.has(entry.id)} />)}
+            {rows.map((entry) => <EntryRow key={entry.id} entry={entry} category={byId.get(entry.categoryId)} settled={isParentsExpense(entry) && settled.has(entry.id)} labels={labelsById} />)}
           </div>
         </section>
       ))}

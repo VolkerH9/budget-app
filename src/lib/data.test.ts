@@ -91,7 +91,7 @@ describe('CSV', () => {
     const csv = toCsv([entry({ note: '=SUMME(A1)', merchant: 'Café; "Süd"' })], DEFAULT_CATEGORIES)
     const line = csv.split('\r\n')[1]
     expect(csv.startsWith('﻿Datum;Art;')).toBe(true)
-    expect(line).toBe(`02.11.2026;Ausgabe;;Food;19,99;"Café; ""Süd""";'=SUMME(A1);nein`)
+    expect(line).toBe(`02.11.2026;Ausgabe;;Food;19,99;"Café; ""Süd""";'=SUMME(A1);nein;`)
   })
 })
 

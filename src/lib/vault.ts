@@ -272,6 +272,7 @@ export async function readLegacy(): Promise<DataSet> {
     entries: await store.entries.toArray(),
     recurring: await store.recurring.toArray(),
     meta: (await store.meta.toArray()).filter((m) => m.key !== 'lock'),
+    labels: [],
   }
 }
 
@@ -370,7 +371,7 @@ export async function setupVault(code: string): Promise<{ checked: number }> {
 
 async function open(key: CryptoKey) {
   const rows = await store.vault.toArray()
-  const data: DataSet = { categories: [], groups: [], entries: [], recurring: [], meta: [] }
+  const data: DataSet = { categories: [], groups: [], entries: [], recurring: [], meta: [], labels: [] }
   for (const row of rows) (data[row.t] as unknown[]).push(await decryptRow(key, row))
   const version = (data.meta.find((m) => m.key === 'dataVersion')?.value as number | undefined) ?? DATA_VERSION
   const migrated = version < DATA_VERSION

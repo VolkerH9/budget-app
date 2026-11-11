@@ -1,16 +1,18 @@
 import { useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Paperclip } from 'lucide-react'
+import { Paperclip, Tag } from 'lucide-react'
 import { db, getMeta, newId, PARENTS_EXPENSE, type Category, type Entry, type EntryType } from '../db'
-import { useApp, useCategories } from '../context'
+import { useApp, useCategories, useLabels } from '../context'
 import { formatDate, today } from '../lib/dates'
 import { amountToInput, parseAmount } from '../lib/format'
 import { haptic } from '../lib/haptics'
 import { expectSystemDialog } from '../lib/lockGuard'
+import { autoLabels, chosenLabels } from '../lib/labels'
 import { compressPhoto } from '../lib/photos'
 import { prepareImage, scanReceipt, ScanError, type ScanResult } from '../lib/scan'
 import { deletePhotos, savePhotos, whenSaved } from '../lib/vault'
 import { Icon } from './Icon'
+import { LabelChip, LabelPicker } from './Labels'
 import { PhotoThumb, PhotoViewer, type PhotoSource } from './PhotoViewer'
 import { AmountDisplay, Keypad } from './Keypad'
 import { Segmented, Sheet, Switch } from './ui'
@@ -121,6 +123,26 @@ export function EntrySheet({ entry, onClose, onSaved }: { entry?: Entry; onClose
   const [merchant, setMerchant] = useState(entry?.merchant ?? '')
   const thumbnail = entry?.thumbnail
   const [refunded, setRefunded] = useState(entry?.refunded ?? false)
+  const [forParents, setForParents] = useState(entry?.forParents ?? false)
+  const allLabels = useLabels()
+  // New entries get the labels whose period contains their date; taking one off counts for this entry only
+  const [added, setAdded] = useState<string[]>(entry?.labels ?? [])
+  const [removed, setRemoved] = useState<string[]>([])
+  const [pickingLabels, setPickingLabels] = useState(false)
+  const auto = entry ? [] : autoLabels(allLabels, date)
+  const labels = chosenLabels(auto, added, removed)
+  const toggleLabel = (id: string) => {
+    if (labels.includes(id)) {
+      setAdded(added.filter((x) => x !== id))
+      if (auto.includes(id)) setRemoved([...removed, id])
+    } else {
+      setRemoved(removed.filter((x) => x !== id))
+      if (!auto.includes(id)) setAdded([...added, id])
+    }
+  }
+  // Labels shown as chips: the chosen ones and those active on the date that were taken off
+  const shownLabels = allLabels.filter((l) => labels.includes(l.id) || auto.includes(l.id))
+  const parentsExpense = type === 'expense' && (categoryId === PARENTS_EXPENSE || forParents)
   const [photos, setPhotos] = useState<PhotoSource[]>(() => (entry?.photos ?? []).map((id) => ({ id })))
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
@@ -148,7 +170,9 @@ export function EntrySheet({ entry, onClose, onSaved }: { entry?: Entry; onClose
       note: note.trim() || undefined,
       merchant: merchant.trim() || undefined,
       thumbnail,
-      refunded: categoryId === PARENTS_EXPENSE && refunded ? true : undefined,
+      refunded: parentsExpense && refunded ? true : undefined,
+      forParents: type === 'expense' && categoryId !== PARENTS_EXPENSE && forParents ? true : undefined,
+      labels: labels.length > 0 ? labels : undefined,
       photos: photos.length > 0 ? photos.map((p) => p.id) : undefined,
     }
     try {
@@ -256,7 +280,21 @@ export function EntrySheet({ entry, onClose, onSaved }: { entry?: Entry; onClose
         </label>
       </div>
 
-      {categoryId === PARENTS_EXPENSE && (
+      <div className="label-row" role="group" aria-label="Labels">
+        {shownLabels.map((l) => <LabelChip key={l.id} label={l} pressed={labels.includes(l.id)} onClick={() => { haptic(); toggleLabel(l.id) }} />)}
+        <button type="button" className="label-chip add" onClick={() => setPickingLabels(true)}><Tag size={14} strokeWidth={2} aria-hidden="true" /> {shownLabels.length > 0 ? 'Labels' : 'Label'}</button>
+      </div>
+
+      {type === 'expense' && categoryId !== PARENTS_EXPENSE && categoryId !== '' && (
+        <div className="form-row">
+          <div className="field grow">
+            <span style={{ flex: 1, color: 'var(--label)' }}>Eltern-Kosten</span>
+            <Switch label="Eltern-Kosten" checked={forParents} onChange={setForParents} />
+          </div>
+        </div>
+      )}
+
+      {parentsExpense && (
         <div className="form-row">
           <div className="field grow">
             <span style={{ flex: 1, color: 'var(--label)' }}>Von Eltern erstattet</span>
@@ -264,6 +302,7 @@ export function EntrySheet({ entry, onClose, onSaved }: { entry?: Entry; onClose
           </div>
         </div>
       )}
+      {pickingLabels && <LabelPicker selected={labels} onToggle={toggleLabel} onClose={() => setPickingLabels(false)} />}
 
       {(merchant || scanned) && (
         <div className="form-row">

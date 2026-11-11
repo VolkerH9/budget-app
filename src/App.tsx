@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { db, PARENTS_REFUND, requestPersistence, type Entry } from './db'
+import { db, isParentsRefund, requestPersistence, type Entry } from './db'
 import { Icon, type IconName } from './components/Icon'
 import { Alert, Toast } from './components/ui'
 import { EntrySheet } from './components/EntrySheet'
 import { AssignSheet } from './components/ParentsCard'
 import { ReportSheet, type ReportKind } from './components/ReportSheet'
+import { LabelDetail } from './components/Labels'
 import { Ctx, type AlertRequest, type AppContext, type SettingsPage } from './context'
 import { bookDueEntries } from './lib/booking'
 import { monthOf, today } from './lib/dates'
@@ -46,10 +47,11 @@ export function App() {
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null)
   const [refund, setRefund] = useState<Entry | null>(null)
   const [report, setReport] = useState<{ month?: string; kind?: ReportKind } | null>(null)
+  const [label, setLabel] = useState<string | null>(null)
 
   /** A new repayment from the parents asks which monthly statement it pays */
   const onSaved = useCallback((saved: Entry, before?: Entry) => {
-    const isRefund = (e?: Entry) => e?.type === 'income' && e.categoryId === PARENTS_REFUND
+    const isRefund = (e?: Entry) => !!e && isParentsRefund(e)
     if (isRefund(saved) && !isRefund(before)) setRefund(saved)
   }, [])
 
@@ -85,6 +87,7 @@ export function App() {
     settingsPage,
     clearSettingsPage,
     openReport: (options) => setReport(options ?? {}),
+    openLabel: setLabel,
   }), [month, showToast, settingsPage, clearSettingsPage])
 
   return (
@@ -110,6 +113,7 @@ export function App() {
           </div>
           {sheet && <EntrySheet entry={sheet.entry} onClose={() => setSheet(null)} onSaved={onSaved} />}
           {refund && <AssignSheet refund={refund} onClose={closeRefund} />}
+          {label && <LabelDetail id={label} onClose={() => setLabel(null)} />}
           {report && <ReportSheet month={report.month} kind={report.kind} onClose={() => setReport(null)} />}
           {toast && <Toast key={toast.id} text={toast.text} onUndo={toast.onUndo} onDone={hideToast} />}
           {alert && <Alert {...alert} onClose={() => setAlert(null)} />}

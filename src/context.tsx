@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Category, type Entry, type Group } from './db'
+import { db, type Category, type Entry, type Group, type Label } from './db'
 import type { AlertButton } from './components/ui'
 import type { AskToShare } from './lib/backup'
 
@@ -10,7 +10,7 @@ export interface AlertRequest {
   buttons: AlertButton[]
 }
 
-export type SettingsPage = 'categories' | 'recurring' | 'subscriptions' | 'security' | 'scan' | 'design'
+export type SettingsPage = 'categories' | 'recurring' | 'subscriptions' | 'security' | 'scan' | 'design' | 'labels'
 
 export interface AppContext {
   month: string
@@ -28,6 +28,8 @@ export interface AppContext {
   clearSettingsPage: () => void
   /** Opens "Monatsabrechnung als PDF", optionally for a month and variant */
   openReport: (options?: { month?: string; kind?: 'parents' | 'month' }) => void
+  /** Opens the overview of a label */
+  openLabel: (id: string) => void
 }
 
 export const Ctx = createContext<AppContext>(null as unknown as AppContext)
@@ -45,6 +47,11 @@ export function useAskToShare(): AskToShare {
 
 export function useCategories(): Category[] {
   return useLiveQuery(() => db.categories.orderBy('order').toArray(), [], [] as Category[])
+}
+
+/** All labels, the newest first */
+export function useLabels(): Label[] {
+  return useLiveQuery(() => db.labels.toArray().then((list) => list.sort((a, b) => b.createdAt - a.createdAt)), [], [] as Label[])
 }
 
 export function useGroups(): Group[] {

@@ -40,10 +40,21 @@ Bei jeder Buchung (neu oder beim Bearbeiten) tippst du auf **Foto anhängen** un
 
 Das PDF entsteht auf dem iPhone und geht über das Teilen-Menü an WhatsApp, Mail oder Dateien. Am Monatsende zeigt die Übersicht die fertige Eltern-Abrechnung zum Teilen (abschaltbar unter Einstellungen › Abrechnung).
 
+## Labels
+
+Mit Labels markierst du Buchungen zusätzlich zu ihrer Kategorie, z. B. alles vom „🏔️ Skiurlaub Tirol 2026“. Eine Buchung kann mehrere Labels tragen.
+
+- **Anlegen**: Einstellungen › Labels › Neues Label. Name, Farbe, Emoji oder Icon, Art (Urlaub, Event, Projekt, Geschenke, Sonstiges), optional ein Zeitraum und ein Budget.
+- **Automatisch im Zeitraum**: Liegt das Datum einer neuen Buchung im Zeitraum, ist das Label schon ausgewählt. Ein Tipp auf den Chip nimmt es nur für diese Buchung heraus. Nach dem Enddatum wird es nicht mehr gesetzt. Solange ein Label läuft, zeigt die Übersicht oben „aktiv · noch X Tage“.
+- **Von Hand**: im Eintragsformular über „Label“ bzw. „Labels“.
+- **Label-Übersicht**: Summe, Aufteilung nach Bereichen und Kategorien, Betrag pro Tag, Budget-Fortschritt und alle Buchungen.
+- **Für alle Buchungen eines Labels**: als Eltern-Kosten markieren oder die Markierung entfernen, Kategorie ändern, ein weiteres Label hinzufügen oder entfernen. Vorher siehst du, wie viele Buchungen betroffen sind, danach kannst du es rückgängig machen.
+- **Filter**: In den Einträgen nach Label filtern. Die CSV-Datei enthält eine Spalte „Labels“.
+
 ## Überkategorien, Eltern-Kosten und Auswertung
 
 - **Überkategorien**: Einstellungen › Kategorien. Überkategorien anlegen, umbenennen, löschen; eine Kategorie verschiebst du, indem du sie antippst und eine andere Überkategorie wählst.
-- **Eltern-Kosten**: Ausgaben für deine Eltern buchst du in „Eltern“, ihre Rückzahlungen in „Kostenrückzahlung Eltern“. „Offen von Eltern“ ist die Differenz. Jeder Monat mit Eltern-Ausgaben hat automatisch eine eigene Abrechnung (Übersicht › Offen von Eltern › Abrechnungen) mit Status offen, teilweise bezahlt oder bezahlt. Nach einer neuen Rückzahlung fragt die App, für welche Abrechnung sie ist, und schlägt die älteste offene vor. Eine Zahlung ohne Zuordnung bezahlt die älteste offene Abrechnung, ein Überschuss die nächste. Ist eine Abrechnung ganz bezahlt, gelten ihre Posten als erstattet; einzelne Ausgaben hakst du zusätzlich von Hand ab. „Eltern-Kosten ausblenden“ nimmt beide Kategorien aus allen Summen.
+- **Eltern-Kosten**: Ausgaben für deine Eltern buchst du in „Eltern“ oder markierst sie in ihrer eigenen Kategorie mit dem Schalter „Eltern-Kosten“ (z. B. ein Restaurantbesuch). Ihre Rückzahlungen buchst du in „Kostenrückzahlung Eltern“. „Offen von Eltern“ ist die Differenz. Jeder Monat mit Eltern-Ausgaben hat automatisch eine eigene Abrechnung (Übersicht › Offen von Eltern › Abrechnungen) mit Status offen, teilweise bezahlt oder bezahlt. Nach einer neuen Rückzahlung fragt die App, für welche Abrechnung sie ist, und schlägt die älteste offene vor. Eine Zahlung ohne Zuordnung bezahlt die älteste offene Abrechnung, ein Überschuss die nächste. Ist eine Abrechnung ganz bezahlt, gelten ihre Posten als erstattet; einzelne Ausgaben hakst du zusätzlich von Hand ab. „Eltern-Kosten ausblenden“ nimmt beide Kategorien aus allen Summen.
 - **Auswertung**: Jahr gegen Vergleichsjahr oder zwei beliebige Monate nebeneinander.
 
 ## Abos
@@ -60,7 +71,7 @@ Das PDF entsteht auf dem iPhone und geht über das Teilen-Menü an WhatsApp, Mai
 
 ## Backup
 
-**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Am eingestellten Tag jedes Monats (Standard: der 1.) erinnert die Übersicht an das Backup, ein Tipp startet es. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
+**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Labels, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Am eingestellten Tag jedes Monats (Standard: der 1.) erinnert die Übersicht an das Backup, ein Tipp startet es. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
 
 **Auf einem neuen iPhone wiederherstellen**
 
