@@ -138,10 +138,12 @@ function Reminders() {
 function BackupHint() {
   const last = useMeta<number | null>('lastBackupAt', null)
   const enabled = useMeta('backupReminder', true)
+  const interval = useMeta<'weekly' | 'monthly'>('backupInterval', 'weekly')
+  const weekdayChoice = useMeta('backupWeekday', 1)
   const day = useMeta('backupDay', 1)
   const dismissed = useMeta<string | null>('backupReminderDismissed', null)
   const backup = useBackupExport()
-  const state = backupState(today(), last, { enabled, day, dismissed })
+  const state = backupState(today(), last, { enabled, interval, weekday: weekdayChoice, day, dismissed })
   if (!state.reminder && !state.stale) return null
   const since = last === null ? 'Noch kein Backup' : `Letztes Backup: ${formatTime(last)}`
   return (
@@ -150,11 +152,11 @@ function BackupHint() {
       <button className="row-main" style={{ textAlign: 'left' }} disabled={backup.busy} onClick={backup.run}>
         <b>{state.reminder ? 'Zeit für dein Backup' : last === null ? 'Noch kein Backup' : `Letztes Backup vor ${state.days} Tagen`}</b>
         <span className="row-sub" style={{ display: 'block', whiteSpace: 'normal' }}>
-          {backup.busy ? 'Backup wird erstellt …' : state.reminder ? `${since}. Antippen sichert alles samt Fotos, verschlüsselt mit deinem App-Code.` : 'Deine Daten und Fotos liegen nur auf diesem iPhone.'}
+          {backup.busy ? 'Backup wird erstellt …' : state.reminder ? `${since}. Antippen und im Teilen-Menü „Budget ablegen“ wählen.` : 'Deine Daten und Fotos liegen nur auf diesem iPhone.'}
         </span>
       </button>
       {state.reminder
-        ? <button className="icon-btn" aria-label="Erinnerung für diesen Monat ausblenden" onClick={() => setMeta('backupReminderDismissed', today().slice(0, 7))}><X size={18} /></button>
+        ? <button className="icon-btn" aria-label="Erinnerung bis zum nächsten Mal ausblenden" onClick={() => setMeta('backupReminderDismissed', state.key)}><X size={18} /></button>
         : <button className="secondary-btn small" disabled={backup.busy} onClick={backup.run}>Sichern</button>}
     </div>
   )

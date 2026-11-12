@@ -8,7 +8,7 @@ import { BackupImport } from '../components/BackupImport'
 import { LabelsList } from '../components/Labels'
 import { useBackupExport } from '../components/BackupExport'
 import { backupName, saveFile, toCsv } from '../lib/backup'
-import { formatTime } from '../lib/dates'
+import { formatTime, WEEKDAYS } from '../lib/dates'
 import { expectSystemDialog } from '../lib/lockGuard'
 import { hasSampleData, loadSampleData, removeSampleData } from '../lib/sample'
 import { totals } from '../lib/subscriptions'
@@ -142,6 +142,8 @@ export function Settings() {
   const preUpdate = useMeta<unknown>('preUpdateBackup', null)
   const backupReminder = useMeta('backupReminder', true)
   const backupDay = useMeta('backupDay', 1)
+  const backupInterval = useMeta<'weekly' | 'monthly'>('backupInterval', 'weekly')
+  const backupWeekday = useMeta('backupWeekday', 1)
   const parentsReminder = useMeta('parentsReminder', true)
   const backup = useBackupExport()
   const theme = useTheme()
@@ -229,11 +231,26 @@ export function Settings() {
           <span className="row-main">Letztes Backup</span>
           <span className="row-value">{lastBackup ? formatTime(lastBackup) : 'Noch nie'}</span>
         </div>
-        <div className="row">
-          <span className="row-main">Monatliche Erinnerung</span>
-          <Switch label="Monatliche Backup-Erinnerung" checked={backupReminder} onChange={(value) => setMeta('backupReminder', value)} />
-        </div>
-        {backupReminder && (
+        <label className="row">
+          <span className="row-main">Erinnerung</span>
+          <select aria-label="Backup-Erinnerung" value={backupReminder ? backupInterval : 'off'} onChange={(e) => {
+            if (e.target.value === 'off') setMeta('backupReminder', false)
+            else { setMeta('backupReminder', true); setMeta('backupInterval', e.target.value) }
+          }}>
+            <option value="weekly">Jede Woche</option>
+            <option value="monthly">Jeden Monat</option>
+            <option value="off">Aus</option>
+          </select>
+        </label>
+        {backupReminder && backupInterval === 'weekly' && (
+          <label className="row">
+            <span className="row-main">Erinnerungstag</span>
+            <select aria-label="Erinnerungstag" value={backupWeekday} onChange={(e) => setMeta('backupWeekday', Number(e.target.value))}>
+              {WEEKDAYS.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
+            </select>
+          </label>
+        )}
+        {backupReminder && backupInterval === 'monthly' && (
           <label className="row">
             <span className="row-main">Erinnerungstag</span>
             <select aria-label="Erinnerungstag" value={backupDay} onChange={(e) => setMeta('backupDay', Number(e.target.value))}>
@@ -248,7 +265,7 @@ export function Settings() {
       <p className="section-foot">
         Deine Daten liegen nur auf diesem iPhone. Das Backup enthält alle Einträge und Belegfotos und ist mit deinem App-Code verschlüsselt.
         Zum Einspielen brauchst du den App-Code, der beim Erstellen galt. API-Schlüssel und App-Code selbst stehen nicht darin.
-        Speichere es in iCloud Drive. Die CSV-Datei ist nicht verschlüsselt und enthält keine Fotos.
+        Mit dem Kurzbefehl „Budget ablegen“ landet es mit einem Tipp im Teilen-Menü im richtigen Ordner. Die CSV-Datei ist nicht verschlüsselt und enthält keine Fotos.
       </p>
       <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(e) => { setImporting(e.target.files?.[0] ?? null); e.target.value = '' }} />
       {importing && <BackupImport file={importing} onClose={() => setImporting(null)} />}

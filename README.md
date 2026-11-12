@@ -76,7 +76,7 @@ Nach jedem Monatsende (und im Januar fürs Vorjahr) steht in der Übersicht „D
 
 ### Kurzbefehl „Budget ablegen“
 
-Eine Web-App darf nicht selbst in einen Ordner speichern. Der Kurzbefehl übernimmt das:
+Eine Web-App darf nicht selbst in einen Ordner speichern. Der Kurzbefehl übernimmt das. Am einfachsten öffnest du auf dem iPhone die fertige Datei `Budget ablegen.shortcut` (iCloud Drive › Claude Projekte › Budget › Kurzbefehle) und tippst „Kurzbefehl hinzufügen“. Backups landen in iCloud Drive › Kurzbefehle › Budget › Backups, Abrechnungen in Budget › Jahr. Von Hand gebaut geht es so:
 
 1. App **Kurzbefehle** öffnen, **+** tippen, Name: **Budget ablegen**.
 2. Unten auf **(i)** tippen und **Im Teilen-Menü anzeigen** einschalten. Bei „Teilen-Menü-Typen“ nur **Dateien** wählen.
@@ -117,7 +117,7 @@ Im Stil des TUHH Managers und der Brainstorm-App: Apple-Stil, weiße Karten mit 
 
 ## Backup
 
-**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Labels, Budgets, Sparziele, die Wunschliste, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Am eingestellten Tag jedes Monats (Standard: der 1.) erinnert die Übersicht an das Backup, ein Tipp startet es. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
+**Einstellungen › Backup exportieren** und die Datei über das Teilen-Menü in iCloud Drive sichern. Das Backup enthält alle Einträge, Kategorien, Labels, Budgets, Sparziele, die Wunschliste, Daueraufträge, Abos und Belegfotos und ist mit deinem App-Code verschlüsselt (AES-256). API-Schlüssel und App-Code selbst stehen nicht darin. Jede Woche am eingestellten Tag (Standard: Montag, auf Wunsch monatlich) erinnert die Übersicht an das Backup, ein Tipp startet es. Im Teilen-Menü wählst du den Kurzbefehl „Budget ablegen“ (Datei `kurzbefehle/Budget ablegen.shortcut`, erzeugt mit `scripts/kurzbefehl.py`), der das Backup in iCloud Drive › Kurzbefehle › Budget › Backups ablegt. Ist das letzte Backup älter als 30 Tage, steht ein Hinweis in der Übersicht.
 
 **Auf einem neuen iPhone wiederherstellen**
 

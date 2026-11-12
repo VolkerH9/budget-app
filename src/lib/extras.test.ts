@@ -220,19 +220,30 @@ describe('Verschlüsseltes Backup', () => {
 
 describe('Erinnerungen', () => {
   const day = (iso: string) => new Date(`${iso}T12:00:00`).getTime()
-  it('erinnert am Backup-Tag, bis ein Backup gemacht oder die Erinnerung ausgeblendet ist', () => {
-    const s = (now: string, last: string | null, dismissed: string | null = null, d = 1) => backupState(now, last ? day(last) : null, { enabled: true, day: d, dismissed }, day(now))
+  it('erinnert jede Woche am gewählten Tag, bis ein Backup gemacht oder die Erinnerung ausgeblendet ist', () => {
+    // 16.11.2026 is a Monday
+    const s = (now: string, last: string | null, dismissed: string | null = null, weekday = 1) =>
+      backupState(now, last ? day(last) : null, { enabled: true, interval: 'weekly', weekday, day: 1, dismissed }, day(now))
+    expect(s('2026-11-16', '2026-11-10')).toMatchObject({ reminder: true, key: '2026-11-16' })
+    expect(s('2026-11-19', '2026-11-10').reminder).toBe(true)
+    expect(s('2026-11-19', '2026-11-16').reminder).toBe(false)
+    expect(s('2026-11-19', '2026-11-10', '2026-11-16').reminder).toBe(false)
+    expect(s('2026-11-23', '2026-11-10', '2026-11-16').reminder).toBe(true)
+    expect(s('2026-11-15', '2026-11-10', null, 7).key).toBe('2026-11-15')
+  })
+  it('erinnert auf Wunsch monatlich am gewählten Tag', () => {
+    const s = (now: string, last: string | null, dismissed: string | null = null, d = 1) => backupState(now, last ? day(last) : null, { enabled: true, interval: 'monthly', weekday: 1, day: d, dismissed }, day(now))
     expect(s('2026-11-01', '2026-10-15').reminder).toBe(true)
     expect(s('2026-11-01', '2026-11-01').reminder).toBe(false)
-    expect(s('2026-11-20', '2026-10-31', '2026-11').reminder).toBe(false)
+    expect(s('2026-11-20', '2026-10-31', '2026-11-01').reminder).toBe(false)
     expect(s('2026-11-14', '2026-11-02', null, 15).reminder).toBe(false)
     expect(s('2026-11-15', '2026-11-02', null, 15).reminder).toBe(true)
-    expect(backupState('2026-11-15', null, { enabled: false, day: 1, dismissed: null }).reminder).toBe(false)
+    expect(backupState('2026-11-15', null, { enabled: false, interval: 'weekly', weekday: 1, day: 1, dismissed: null }).reminder).toBe(false)
   })
   it('meldet ein Backup, das 30 Tage oder älter ist', () => {
-    expect(backupState('2026-11-20', day('2026-10-21'), { enabled: false, day: 1, dismissed: null }, day('2026-11-20')).stale).toBe(true)
-    expect(backupState('2026-11-20', day('2026-10-25'), { enabled: false, day: 1, dismissed: null }, day('2026-11-20')).stale).toBe(false)
-    expect(backupState('2026-11-20', null, { enabled: false, day: 1, dismissed: null }).stale).toBe(true)
+    expect(backupState('2026-11-20', day('2026-10-21'), { enabled: false, interval: 'weekly' as const, weekday: 1, day: 1, dismissed: null }, day('2026-11-20')).stale).toBe(true)
+    expect(backupState('2026-11-20', day('2026-10-25'), { enabled: false, interval: 'weekly' as const, weekday: 1, day: 1, dismissed: null }, day('2026-11-20')).stale).toBe(false)
+    expect(backupState('2026-11-20', null, { enabled: false, interval: 'weekly' as const, weekday: 1, day: 1, dismissed: null }).stale).toBe(true)
   })
   it('fragt am Monatsende und im Folgemonat nach der Eltern-Abrechnung', () => {
     expect(reportMonth('2026-10-31')).toBe('2026-10')
