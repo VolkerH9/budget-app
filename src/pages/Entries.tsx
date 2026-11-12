@@ -8,7 +8,7 @@ import { useStatements } from '../components/ParentsCard'
 import { LabelChip } from '../components/Labels'
 import { PhotoViewer } from '../components/PhotoViewer'
 import { SwipeRow } from '../components/SwipeRow'
-import { CountUp, MonthPicker, Sheet } from '../components/ui'
+import { CountUp, MonthPicker, PageHead, Sheet } from '../components/ui'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { dayLabel, formatDate, monthRange } from '../lib/dates'
 import { amountToInput, formatEuro, formatPercent, parseAmount } from '../lib/format'
@@ -275,10 +275,9 @@ export function Entries() {
 
   return (
     <main className="page">
-      <div className="title-row">
-        <h1 className="page-title">Einträge</h1>
-        <button className="link-btn" onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>{selecting ? 'Fertig' : 'Auswählen'}</button>
-      </div>
+      <PageHead title="Einträge">
+        <button className="link-btn select-toggle" onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>{selecting ? 'Fertig' : 'Auswählen'}</button>
+      </PageHead>
       {!allMonths && !byRange && <MonthPicker month={month} onChange={setMonth} />}
       {byRange && (
         <button className="range-chip" onClick={() => setFiltering(true)}>

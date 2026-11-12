@@ -33,6 +33,10 @@ Pure logic, each with tests: `lib/labels.ts` (auto labels, summaries, bulk actio
 
 Budget and goal maths is in `lib/budgets.ts` (pure functions): progress, levels (yellow from 80 %, red over), forecasts from the pace so far, shown from day 5 of a window (`MIN_DAYS`).
 
+## Design
+
+Like Volker's TUHH Manager and Brainstorm apps (tokens in `src/styles.css`): Apple style, cards with soft shadow, tinted gradient at the top of each page, uppercase section titles, accent euro blue `#1F66E0` (dark `#5C9DFF`). Bottom bar across the full width with four tabs and the raised add button in the middle; Einstellungen opens from the round button in `PageHead`. HUD stays as a second theme. The app icon, a redrawn glowing euro sign from Volker's picture, is drawn in `scripts/make-icons.mjs` (`npm run icons`, also writes the start screens).
+
 ## Testing
 
 Unit tests in `src/lib/*.test.ts` use fake-indexeddb and run the real vault. For changes the user will see, also test in a mobile-sized browser (light and dark), including an update from the live build with sample data, so no data is lost.

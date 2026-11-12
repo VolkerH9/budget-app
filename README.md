@@ -107,7 +107,9 @@ Nach jedem Monat mit genug Buchungen (im Januar auch fürs Vorjahr) erscheint �
 
 ## Design
 
-**Einstellungen › Design**: Standard (hell oder dunkel wie das iPhone) oder HUD (dunkel mit leuchtenden Linien).
+Im Stil des TUHH Managers und der Brainstorm-App: Apple-Stil, weiße Karten mit weichem Schatten, leichter Farbverlauf oben, Abschnittsüberschriften in Großbuchstaben, Akzent Euro-Blau wie das App-Symbol. Unten eine Leiste über die ganze Breite mit dem Plus in der Mitte; die Einstellungen öffnet der runde Knopf oben rechts.
+
+**Einstellungen › Design**: Standard (hell oder dunkel wie das iPhone) oder HUD (dunkel mit leuchtenden Linien). Das App-Symbol (leuchtendes Euro-Zeichen) entsteht mit `npm run icons` aus `scripts/make-icons.mjs`.
 
 ## Daueraufträge
 

@@ -6,7 +6,7 @@ import { useApp, useCategories, useGroups, useLabels } from '../context'
 import { Icon } from '../components/Icon'
 import { AmountDisplay, Keypad } from '../components/Keypad'
 import { LabelGlyph } from '../components/Labels'
-import { MonthPicker, Segmented, Sheet, useMonthSwipe } from '../components/ui'
+import { MonthPicker, PageHead, Segmented, Sheet, useMonthSwipe } from '../components/ui'
 import { CategoryIcon } from '../components/CategoryIcon'
 import {
   goalProgress, groupCategoryIds, labelProgress, monthProgress, periodName, periodProgress,
@@ -297,7 +297,7 @@ export function Budgets() {
 
   return (
     <main className="page" {...swipe}>
-      <h1 className="page-title">Budgets & Ziele</h1>
+      <PageHead title="Budgets & Ziele" />
 
       <div className="section-head">
         <h2 className="section-title strong">Sparziele</h2>

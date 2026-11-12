@@ -25,7 +25,6 @@ const TABS: [Tab, string, IconName][] = [
   ['entries', 'Einträge', 'list'],
   ['analysis', 'Auswertung', 'chart'],
   ['budgets', 'Budgets', 'budget'],
-  ['settings', 'Einstellungen', 'settings'],
 ]
 
 function Booking({ onBooked }: { onBooked: (count: number) => void }) {
@@ -112,15 +111,22 @@ export function App() {
           {tab === 'budgets' && <Budgets />}
           {tab === 'settings' && <Settings />}
           <div className="bottom">
+            {/* Four areas around the add button; Einstellungen sits as a round button in the page head */}
             <nav className="tabbar" aria-label="Hauptnavigation">
-              {TABS.map(([key, label, icon]) => (
+              {TABS.slice(0, 2).map(([key, label, icon]) => (
                 <button key={key} className="tab" aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>
-                  <Icon name={icon} size={23} />
+                  <Icon name={icon} size={24} />
+                  <span>{label}</span>
+                </button>
+              ))}
+              <button className="fab" aria-label="Neuer Eintrag" onClick={() => setSheet({ key: Date.now() })}><Icon name="plus" size={30} width={2.4} /></button>
+              {TABS.slice(2).map(([key, label, icon]) => (
+                <button key={key} className="tab" aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>
+                  <Icon name={icon} size={24} />
                   <span>{label}</span>
                 </button>
               ))}
             </nav>
-            <button className="fab" aria-label="Neuer Eintrag" onClick={() => setSheet({ key: Date.now() })}><Icon name="plus" size={30} width={2.4} /></button>
           </div>
           {sheet && <EntrySheet key={sheet.key} entry={sheet.entry} draft={sheet.draft} onClose={() => setSheet(null)} onSaved={onSaved} />}
           {wrapped && <WrappedPlayer period={{ kind: wrapped.length === 4 ? 'year' : 'month', key: wrapped }} title={wrapped.length === 4 ? wrapped : monthLabel(wrapped)} onClose={() => setWrapped(null)} />}

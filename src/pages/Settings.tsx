@@ -127,7 +127,7 @@ function WageSheet({ onClose }: { onClose: () => void }) {
 }
 
 export function Settings() {
-  const { alert, toast, settingsPage, clearSettingsPage, openReport, openLabel } = useApp()
+  const { alert, toast, settingsPage, clearSettingsPage, openReport, openLabel, openTab } = useApp()
   const labelCount = useLiveQuery(() => db.labels.filter((l) => !l.archived).count(), [], 0)
   const categories = useCategories()
   const groups = useGroups()
@@ -186,6 +186,9 @@ export function Settings() {
 
   return (
     <main className="page">
+      <div className="subpage-nav">
+        <button className="back" onClick={() => openTab('overview')}><Icon name="left" size={22} /> Übersicht</button>
+      </div>
       <h1 className="page-title">Einstellungen</h1>
 
       <h2 className="section-title">Planung</h2>

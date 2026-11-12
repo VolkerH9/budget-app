@@ -24,8 +24,8 @@ export const statementCsv = (c: ExportContext) => toCsv(c.statement.entries, c.c
 
 // ---- Excel ----
 
-const TINT = 'FF3368C9'
-const TINT_SOFT = 'FFE8EFFA'
+const TINT = 'FF1F66E0'
+const TINT_SOFT = 'FFE8F0FD'
 const EURO = '#,##0.00 "€";-#,##0.00 "€"'
 const PERCENT = '0.0 %'
 const DATE = 'dd.mm.yyyy'

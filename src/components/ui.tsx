@@ -5,6 +5,21 @@ import { addMonths, monthLabel, monthOf, today } from '../lib/dates'
 import { formatEuro } from '../lib/format'
 import { change } from '../lib/stats'
 import { Icon } from './Icon'
+import { useApp } from '../context'
+
+/** Page title with the round buttons on the right; Einstellungen is always one of them */
+export function PageHead({ title, children }: { title: string; children?: ReactNode }) {
+  const { openTab } = useApp()
+  return (
+    <div className="page-head">
+      <h1 className="page-title">{title}</h1>
+      <div className="head-btns">
+        {children}
+        <button className="head-btn" aria-label="Einstellungen" onClick={() => openTab('settings')}><Icon name="settings" size={20} /></button>
+      </div>
+    </div>
+  )
+}
 
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
   return <button className="switch" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} />

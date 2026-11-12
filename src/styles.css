@@ -1,30 +1,32 @@
 :root {
+  /* Apple style like the TUHH Manager and Brainstorm, with the euro blue of the app icon */
   color-scheme: light dark;
-  --bg: #f2f2f7;
+  --bg: #f2f4f7;
+  --bg-tint: #e8f0fd;
   --card: #ffffff;
-  --card2: #f2f2f7;
+  --card2: #f2f4f7;
   --label: #1c1c1e;
   --label2: rgba(60, 60, 67, 0.64);
-  --label3: rgba(60, 60, 67, 0.36);
-  --fill: rgba(120, 120, 128, 0.1);
-  --sep: rgba(60, 60, 67, 0.16);
-  --fill2: rgba(120, 120, 128, 0.2);
-  --glass: rgba(250, 250, 252, 0.86);
-  --glass-line: rgba(255, 255, 255, 0.7);
-  /* One calm accent; green and red only for savings and overspending */
-  --tint: #3368c9;
-  --tint-soft: rgba(51, 104, 201, 0.12);
+  --label3: rgba(60, 60, 67, 0.34);
+  --fill: #f0f1f4;
+  --sep: rgba(60, 60, 67, 0.13);
+  --fill2: #e5e7ec;
+  --glass: rgba(255, 255, 255, 0.84);
+  --glass-line: rgba(60, 60, 67, 0.13);
+  /* One accent; green and red only for savings and overspending */
+  --tint: #1f66e0;
+  --tint-soft: rgba(31, 102, 224, 0.12);
   --green: #2a8350;
   --yellow: #a85a06;
   --yellow-bar: #e8932a;
   --red: #c4372d;
   --red-bar: #e5483c;
   --on-tint: #ffffff;
-  --shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --radius: 18px;
+  --shadow: 0 2px 6px rgba(16, 24, 40, 0.06), 0 24px 60px rgba(16, 32, 64, 0.16);
+  --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 20px rgba(16, 32, 64, 0.06);
+  --radius: 16px;
   --num-font: inherit;
-  --tabbar: 62px;
+  --tabbar: 58px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -32,25 +34,27 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #000000;
+    --bg-tint: #04112a;
     --card: #1c1c1e;
     --card2: #2c2c2e;
-    --label: #f5f5f7;
-    --label2: rgba(235, 235, 245, 0.6);
-    --label3: rgba(235, 235, 245, 0.34);
-    --fill: rgba(120, 120, 128, 0.22);
-    --sep: rgba(84, 84, 88, 0.5);
-    --fill2: rgba(120, 120, 128, 0.36);
-    --glass: rgba(40, 40, 44, 0.86);
-    --glass-line: rgba(255, 255, 255, 0.08);
-    --tint: #5b8cf0;
-    --tint-soft: rgba(91, 140, 240, 0.18);
+    --label: #ffffff;
+    --label2: rgba(235, 235, 245, 0.62);
+    --label3: rgba(235, 235, 245, 0.3);
+    --fill: #2c2c2e;
+    --sep: rgba(84, 84, 88, 0.55);
+    --fill2: #3a3a3c;
+    --glass: rgba(28, 28, 30, 0.84);
+    --glass-line: rgba(84, 84, 88, 0.55);
+    --tint: #5c9dff;
+    --tint-soft: rgba(92, 157, 255, 0.18);
+    --on-tint: #00163a;
     --green: #4cbf78;
     --yellow: #f0a548;
     --yellow-bar: #f0a548;
     --red: #ff6b5e;
     --red-bar: #ff5747;
-    --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
-    --card-shadow: none;
+    --shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -80,6 +84,7 @@
   --card-shadow: inset 0 0 0 1px rgba(56, 217, 245, 0.22), 0 0 16px rgba(56, 217, 245, 0.05);
   --radius: 10px;
   --num-font: ui-monospace, 'SF Mono', Menlo, monospace;
+  --bg-tint: #03070b;
 }
 
 * {
@@ -170,15 +175,51 @@ button:disabled {
   overscroll-behavior-y: contain;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  padding: calc(var(--safe-top) + 14px) 16px calc(var(--safe-bottom) + var(--tabbar) + 44px);
+  padding: calc(var(--safe-top) + 14px) 16px calc(var(--safe-bottom) + var(--tabbar) + 48px);
+  background: linear-gradient(180deg, var(--bg-tint) 0, var(--bg) 360px) no-repeat local, var(--bg);
 }
 
 .page-title {
-  margin: 8px 4px 12px;
-  font-size: 34px;
-  line-height: 41px;
+  margin: 8px 4px 14px;
+  font-size: 30px;
+  line-height: 1.12;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.02em;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.page-head .page-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.head-btns {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 6px 0;
+}
+
+.head-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  color: var(--label2);
+}
+
+.head-btn:active {
+  transform: scale(0.94);
 }
 
 .subpage-nav {
@@ -197,49 +238,41 @@ button:disabled {
   color: var(--tint);
 }
 
-/* Tab bar and add button, side by side as on current iOS */
+/* Tab bar across the bottom with the add button in the middle, as in the TUHH Manager */
 
 .bottom {
   position: absolute;
   z-index: 20;
-  left: 16px;
-  right: 16px;
-  bottom: max(calc(var(--safe-bottom) - 8px), 12px);
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  pointer-events: none;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 6px 8px calc(var(--safe-bottom) + 4px);
+  background: var(--glass);
+  border-top: 1px solid var(--sep);
+  -webkit-backdrop-filter: saturate(1.6) blur(20px);
+  backdrop-filter: saturate(1.6) blur(20px);
 }
 
 .tabbar {
-  flex: 1;
-  min-width: 0;
   height: var(--tabbar);
   display: grid;
-  /* Wider columns for the longer labels */
-  grid-template-columns: 0.95fr 0.85fr 1.1fr 0.85fr 1.25fr;
-  padding: 3px;
-  border-radius: 31px;
-  background: var(--glass);
-  border: 0.5px solid var(--glass-line);
-  box-shadow: var(--shadow);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  backdrop-filter: blur(24px) saturate(180%);
-  pointer-events: auto;
+  grid-template-columns: 1fr 1fr 76px 1fr 1fr;
+  align-items: start;
 }
 
 .tab {
   min-width: 0;
+  min-height: 46px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  border-radius: 27px;
-  color: var(--label);
-  font-size: 9.5px;
+  gap: 2px;
+  color: var(--label2);
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
+  transition: color 0.2s;
 }
 
 .tab span {
@@ -251,20 +284,23 @@ button:disabled {
 
 .tab[aria-current='page'] {
   color: var(--tint);
-  background: var(--fill);
+}
+
+.tab:active {
+  transform: scale(0.94);
 }
 
 .fab {
-  flex: none;
+  justify-self: center;
   width: 58px;
   height: 58px;
+  margin-top: -24px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   background: var(--tint);
   color: var(--on-tint);
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--tint) 40%, transparent);
-  pointer-events: auto;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--tint) 45%, transparent);
   transition: transform 0.12s;
 }
 
@@ -318,18 +354,16 @@ button:disabled {
 /* Grouped lists */
 
 .section-title {
-  margin: 22px 16px 6px;
+  margin: 22px 16px 7px;
   color: var(--label2);
   font-size: 13px;
-  letter-spacing: 0;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .section-title.strong {
-  margin: 22px 4px 8px;
-  color: var(--label);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  margin: 26px 4px 8px;
 }
 
 .section-foot {
@@ -530,19 +564,22 @@ button.row:active,
   gap: 2px;
   padding: 2px;
   border-radius: 10px;
-  background: var(--fill);
+  background: var(--fill2);
 }
 
 .segmented button {
-  min-height: 44px;
+  min-height: 40px;
   border-radius: 8px;
+  color: var(--label2);
   font-size: 14px;
   font-weight: 500;
+  transition: background 0.2s, color 0.2s;
 }
 
 .segmented button[aria-pressed='true'] {
   background: var(--card);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  color: var(--label);
   font-weight: 600;
 }
 
@@ -707,7 +744,7 @@ button.row:active,
   z-index: 50;
   left: 16px;
   right: 16px;
-  bottom: calc(max(calc(var(--safe-bottom) - 8px), 12px) + var(--tabbar) + 12px);
+  bottom: calc(var(--safe-bottom) + var(--tabbar) + 22px);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2343,13 +2380,22 @@ button.cmp-row:active {
   color: var(--tint);
 }
 
-:root[data-theme='hud'] .tabbar {
-  box-shadow: 0 0 0 1px rgba(56, 217, 245, 0.3), 0 0 22px rgba(56, 217, 245, 0.12);
-  border: 0;
+:root[data-theme='hud'] .bottom {
+  border-top: 0;
+  box-shadow: 0 -1px 0 rgba(56, 217, 245, 0.3), 0 0 22px rgba(56, 217, 245, 0.12);
+}
+
+:root[data-theme='hud'] .page {
+  background: transparent;
+}
+
+:root[data-theme='hud'] .section-title {
+  font-family: var(--num-font);
+  font-weight: 500;
+  letter-spacing: 0.08em;
 }
 
 :root[data-theme='hud'] .tab[aria-current='page'] {
-  background: rgba(56, 217, 245, 0.12);
   text-shadow: 0 0 8px rgba(56, 217, 245, 0.6);
 }
 
@@ -2852,6 +2898,12 @@ button.label-chip:active {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+}
+
+.select-toggle {
+  min-height: 38px;
+  padding: 0 6px;
+  font-size: 17px;
 }
 
 .title-row .link-btn {

@@ -6,7 +6,7 @@ import { useApp, useCategories, useGroups, useMeta, useRangeEntries } from '../c
 import { CategoryIcon } from '../components/CategoryIcon'
 import { Icon } from '../components/Icon'
 import { HideParentsRow } from '../components/ParentsCard'
-import { Chevron, Collapse, CountUp, Segmented, Trend, useSticky } from '../components/ui'
+import { Chevron, Collapse, CountUp, PageHead, Segmented, Trend, useSticky } from '../components/ui'
 import { addMonths, monthLabel, monthOf, today } from '../lib/dates'
 import { formatEuro, formatPercent } from '../lib/format'
 import { change, compareTree, inPeriod, monthlySeries, monthPeriod, summarize, withoutParents, yearHighlights, yearPeriod, type CompareNode, type MonthSummary } from '../lib/stats'
@@ -276,7 +276,7 @@ export function Analysis() {
   }, [statementTarget, clearStatementTarget, setView])
   return (
     <main className="page">
-      <h1 className="page-title">Auswertung</h1>
+      <PageHead title="Auswertung" />
       <Segmented value={view} options={[['statement', 'Abrechnung'], ['compare', 'Vergleich']]} onChange={setView} />
       <div className="group" style={{ margin: '10px 0 12px' }}><HideParentsRow hide={hide} /></div>
       {view === 'statement'

@@ -10,7 +10,7 @@ import { CategoryIcon } from '../components/CategoryIcon'
 import { GroupSheet, previousMonthLabel, type DetailPeriods } from '../components/GroupSheet'
 import { HideParentsRow, ParentsCard } from '../components/ParentsCard'
 import { Ring } from '../components/Ring'
-import { CountUp, MonthPicker, Segmented, Trend, useMonthSwipe, useSticky, YearPicker } from '../components/ui'
+import { CountUp, MonthPicker, PageHead, Segmented, Trend, useMonthSwipe, useSticky, YearPicker } from '../components/ui'
 import { useBackupExport } from '../components/BackupExport'
 import { REPORT_DONE } from '../components/ReportSheet'
 import { statements } from '../lib/parents'
@@ -342,7 +342,7 @@ export function Overview() {
 
   return (
     <main className="page" {...(mode === 'month' ? swipe : {})}>
-      <h1 className="page-title">Übersicht</h1>
+      <PageHead title="Übersicht" />
       <ActiveLabels />
       <Segmented value={mode} options={[['month', 'Monat'], ['year', 'Jahr']]} onChange={setMode} />
       <div style={{ height: 6 }} />
