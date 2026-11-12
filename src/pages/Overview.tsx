@@ -12,6 +12,7 @@ import { HideParentsRow, ParentsCard } from '../components/ParentsCard'
 import { Ring } from '../components/Ring'
 import { CountUp, MonthPicker, PageHead, Segmented, Trend, useMonthSwipe, useSticky, YearPicker } from '../components/ui'
 import { useBackupExport } from '../components/BackupExport'
+import { PaymentsCard } from '../components/ApplePay'
 import { REPORT_DONE } from '../components/ReportSheet'
 import { statements } from '../lib/parents'
 import { backupState, parentsReportDue } from '../lib/reminders'
@@ -361,6 +362,7 @@ export function Overview() {
       </div>
 
       <div className="stack">
+        <PaymentsCard />
         <AffordButton />
         <SavingsCard saving={summary.saving} income={summary.income} rate={summary.savingsRate} goal={goal} />
         <Reminders />

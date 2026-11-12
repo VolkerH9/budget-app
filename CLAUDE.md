@@ -41,6 +41,10 @@ Like Volker's TUHH Manager and Brainstorm apps (tokens in `src/styles.css`): App
 
 `kurzbefehle/Budget ablegen.shortcut` (share sheet, files) saves backups to iCloud Drive/Shortcuts/Budget/Backups and statements to Budget/<year>. Built by `scripts/kurzbefehl.py`, then `shortcuts sign --mode anyone`. A copy lies in iCloud Drive › Claude Projekte › Budget › Kurzbefehle for Volker to open on the iPhone. The backup reminder (`lib/reminders.ts`) is weekly on a weekday by default, monthly optional.
 
+## Apple Pay inbox
+
+`eingang/` is a Cloudflare Worker (`budget-eingang`, D1 `budget-eingang`, account of the Tankpreis/Brainstorm apps; deploy with `npx wrangler deploy` in `eingang/`, migrations `npx wrangler d1 migrations apply budget-eingang --remote`). The app registers an RSA public key and two random keys (only their hashes are stored); the shortcut "Budget Apple Pay" (Wallet automation, `scripts/kurzbefehl.py`) posts payments with the shortcut key; the worker encrypts each payment for the app at once (`eingang/src/crypto.ts`, shared with the app). The app fetches on open (`components/ApplePay.tsx`), stores them as `applePayPending` in meta, waits for `whenSaved`, then deletes them in the inbox; `applePaySeen` prevents doubles. Category suggestions: `lib/suggest.ts` (note first, then learned merchant `merchantCategories`, earlier entries, keywords). A new iPhone cannot reconnect while the old setup exists: reset with `npx wrangler d1 execute budget-eingang --remote --command "DELETE FROM einstellungen; DELETE FROM zahlungen;"`. KV was dropped because its lists lag behind writes and deletes.
+
 ## Testing
 
 Unit tests in `src/lib/*.test.ts` use fake-indexeddb and run the real vault. For changes the user will see, also test in a mobile-sized browser (light and dark), including an update from the live build with sample data, so no data is lost.

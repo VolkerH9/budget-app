@@ -11,7 +11,7 @@ export interface AlertRequest {
   buttons: AlertButton[]
 }
 
-export type SettingsPage = 'categories' | 'recurring' | 'subscriptions' | 'security' | 'scan' | 'design' | 'labels'
+export type SettingsPage = 'categories' | 'recurring' | 'subscriptions' | 'security' | 'scan' | 'design' | 'labels' | 'applepay'
 
 export interface AppContext {
   month: string

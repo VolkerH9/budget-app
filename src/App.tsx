@@ -8,6 +8,7 @@ import { ReportSheet, type ReportKind } from './components/ReportSheet'
 import { LabelDetail } from './components/Labels'
 import { AffordSheet, type AffordDraft } from './components/AffordSheet'
 import { WrappedPlayer } from './components/Wrapped'
+import { ApplePaySync } from './components/ApplePay'
 import { Ctx, type AlertRequest, type AppContext, type SettingsPage, type Tab } from './context'
 import { bookDueEntries } from './lib/booking'
 import { monthLabel, monthOf, today } from './lib/dates'
@@ -105,6 +106,7 @@ export function App() {
       <LockGate onSetupDone={(checked) => showToast(`App-Code aktiv, ${checked} Datensätze verschlüsselt und geprüft`)}>
         <div className="app">
           <Booking onBooked={onBooked} />
+          <ApplePaySync />
           {tab === 'overview' && <Overview />}
           {tab === 'entries' && <Entries />}
           {tab === 'analysis' && <Analysis />}

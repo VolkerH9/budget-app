@@ -1,0 +1,13 @@
+{
+  // Eingang der Budget-App für Apple-Pay-Zahlungen. Der Kurzbefehl schickt jede Zahlung hierher,
+  // der Eingang verschlüsselt sie sofort mit dem öffentlichen Schlüssel der App und hält sie,
+  // bis die App sie abholt. Lesen kann sie nur die App auf dem iPhone.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "budget-eingang",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "budget-eingang", "database_id": "579823f5-aced-473c-a241-f1cee5da76df", "migrations_dir": "migrations" }
+  ],
+  "observability": { "enabled": false }
+}

@@ -91,6 +91,18 @@ Optional als Erinnerung: Kurzbefehle › **Automation** › **Neue Automation** 
 
 Auf der Übersicht oder im Eintragsformular. Betrag, optional Name, Kategorie, Label, Zeitpunkt (jetzt oder ein Monat) und „verteilt auf“ mehrere Monate. Die Ampel zeigt grün (passt locker), gelb (knapp) oder rot (sprengt Budget oder Ziel) mit einem Satz Begründung. Darunter: Rest im Monat vorher und nachher (mit Abos, Daueraufträgen und dem bisherigen Tempo), betroffene Budgets, mögliche Sparquote und was mit deinen Sparzielen passiert. Mit Stundenlohn (Einstellungen › Stundenlohn) steht dabei, wie viele Arbeitsstunden das sind. „Jetzt als Ausgabe buchen“ öffnet das Formular vorausgefüllt, „Auf Wunschliste setzen“ merkt den Kauf. Der Rechner ändert nichts, solange du nicht buchst.
 
+## Apple Pay automatisch erfassen
+
+**Einstellungen › Apple Pay › Apple Pay verbinden.** Danach schickt ein Kurzbefehl bei jeder Apple-Pay-Zahlung Händler und Betrag an einen kleinen Eingang bei Cloudflare (`eingang/`, https://budget-eingang.tankpreis-app.workers.dev). Der Eingang verschlüsselt jede Zahlung sofort mit dem öffentlichen Schlüssel der App, lesen kann sie nur dein iPhone. Beim Öffnen holt Budget die Zahlungen ab, speichert sie verschlüsselt und löscht sie im Eingang. In der Übersicht steht dann „3 neue Apple-Pay-Zahlungen“: Du schreibst kurz dazu, was es war (z. B. „Döner“), die Kategorie passt sich an, und mit „Übernehmen“ wird gebucht. Den Händler merkt sich die App fürs nächste Mal.
+
+Einrichten auf dem iPhone:
+
+1. In Budget: Einstellungen › Apple Pay › „Apple Pay verbinden“, dann „Schlüssel kopieren“.
+2. In der App Dateien: iCloud Drive › Claude Projekte › Budget › Kurzbefehle › **Budget Apple Pay** öffnen, „Kurzbefehl hinzufügen“, Schlüssel einfügen.
+3. App Kurzbefehle › Automation › **+** › **Wallet**: deine Karte wählen, „Sofort ausführen“ an, Aktion „Kurzbefehl ausführen“ › „Budget Apple Pay“, Eingabe „Kurzbefehleingabe“.
+
+Ohne Internet wartet die Zahlung in iCloud Drive › Kurzbefehle › Budget-Warteschlange.txt und geht beim nächsten Mal mit. Nicht abgeholte Zahlungen löscht der Eingang nach 60 Tagen.
+
 ## Rückblick („Wrapped“)
 
 Nach jedem Monat mit genug Buchungen (im Januar auch fürs Vorjahr) erscheint „Dein Oktober-Rückblick ist da“. Antippen rechts geht weiter, links zurück, Halten pausiert. Karten: Bilanz, Top-Kategorie, teuerste Woche und teuerster Tag, wo es weniger und wo es mehr wurde, Vergleich zum Vormonat, Lieblingsladen, Labels, Budgets und Ziele, ein Fun Fact und ein Abschluss mit Ausblick. „Karte teilen“ macht ein Bild, mit „Nur Prozente“ ohne Beträge. Alle Rückblicke stehen unter Auswertung › Abrechnung › Rückblicke.

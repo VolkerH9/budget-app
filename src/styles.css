@@ -3426,3 +3426,119 @@ button.label-chip:active {
   color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
 }
+
+/* Apple Pay payments to confirm */
+
+.pay-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  animation: rise 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.pay-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pay-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--tint-soft);
+  color: var(--tint);
+}
+
+.pay-merchant {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pay-amount {
+  flex: none;
+  font-size: 17px;
+}
+
+.pay-amount-input {
+  width: 96px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--fill);
+  text-align: right;
+}
+
+.pay-note {
+  min-height: 44px;
+}
+
+.pay-category {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 4px;
+  border-top: 1px solid var(--sep);
+  text-align: left;
+}
+
+.pay-none {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--fill);
+  color: var(--label2);
+  font-weight: 700;
+}
+
+.pay-strip {
+  margin: 0 -4px;
+}
+
+.pay-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.small-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  min-height: 44px;
+  padding: 0 18px;
+}
+
+.pay-reminder {
+  display: flex;
+  width: 100%;
+}
+
+.key-text {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-steps ol {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 1.4;
+}

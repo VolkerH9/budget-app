@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon'
 import { Segmented, Sheet, Switch } from '../components/ui'
 import { BackupImport } from '../components/BackupImport'
 import { LabelsList } from '../components/Labels'
+import { ApplePayPage } from '../components/ApplePay'
 import { useBackupExport } from '../components/BackupExport'
 import { backupName, saveFile, toCsv } from '../lib/backup'
 import { formatTime, WEEKDAYS } from '../lib/dates'
@@ -128,6 +129,7 @@ function WageSheet({ onClose }: { onClose: () => void }) {
 
 export function Settings() {
   const { alert, toast, settingsPage, clearSettingsPage, openReport, openLabel, openTab } = useApp()
+  const applePay = useMeta<unknown>('applePay', null)
   const labelCount = useLiveQuery(() => db.labels.filter((l) => !l.archived).count(), [], 0)
   const categories = useCategories()
   const groups = useGroups()
@@ -167,6 +169,7 @@ export function Settings() {
   if (sub === 'security') return <SecurityPage onBack={() => setSub(null)} />
   if (sub === 'scan') return <ScanPage onBack={() => setSub(null)} />
   if (sub === 'design') return <DesignPage onBack={() => setSub(null)} />
+  if (sub === 'applepay') return <SubPage title="Apple Pay" onBack={() => setSub(null)}><ApplePayPage /></SubPage>
   if (sub === 'labels') return <SubPage title="Labels" onBack={() => setSub(null)}><LabelsList onOpen={openLabel} /></SubPage>
 
   const fail = (error: unknown) => alert({ title: 'Das hat nicht geklappt', message: (error as Error).message, buttons: [{ label: 'OK', style: 'strong' }] })
@@ -206,6 +209,7 @@ export function Settings() {
       <h2 className="section-title">App</h2>
       <div className="group">
         <NavRow label="Face ID & Code" onClick={() => setSub('security')} />
+        <NavRow label="Apple Pay" value={applePay ? 'Verbunden' : 'Aus'} onClick={() => setSub('applepay')} />
         <NavRow label="Design" value={theme === 'hud' ? 'HUD' : 'Standard'} onClick={() => setSub('design')} />
         <NavRow label="Belegscan" value={apiKey ? 'Eingerichtet' : 'Nicht eingerichtet'} onClick={() => setSub('scan')} />
       </div>
